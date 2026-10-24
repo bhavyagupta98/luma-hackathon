@@ -1,17 +1,56 @@
 # Decision Log
 
-Record decisions that affect architecture, dependencies, conventions, or
-delivery. Add new entries at the top using the template below.
+## 2026-10-24 — Add organization-scoped voice administration
 
-## Decision Template
+- **Status:** Accepted
+- **Context:** A voice-authenticated administrator must be able to register
+  another administrator or non-admin operator.
+- **Decision:** Bootstrap the first admin locally. Give `org_admin` tokens
+  organization member/admin creation scopes, require all identity, role,
+  device, and assignment fields in `add_organization_user`, consume one fresh
+  voice token per attempt, and require the new person to enroll their own voice.
+- **Consequences:** Role changes are explicit, organization-scoped,
+  transactional, idempotent, and audited. Speech interpretation remains a
+  frontend responsibility and voice alone is still not production-grade proof.
 
-### YYYY-MM-DD — Short decision title
+## 2026-10-24 — Pivot from warehouse handoffs to datacenter control
 
-- **Status:** Proposed | Accepted | Superseded
-- **Context:** What problem or constraint prompted this decision?
-- **Decision:** What was chosen?
-- **Consequences:** What tradeoffs, follow-up work, or limitations result?
+- **Status:** Accepted
+- **Context:** The pilot should demonstrate one simple datacenter task rather
+  than warehouse pallet workflows.
+- **Decision:** Remove the warehouse/frontend APIs and support one backend
+  capability: starting or stopping seeded simulated servers.
+- **Consequences:** The database, tools, tests, docs, and skills now use
+  operators, devices, servers, assignments, and server action events. No real
+  infrastructure is affected.
 
----
+## 2026-10-24 — Require a signed voice token for every server action
 
-No project decisions have been recorded yet.
+- **Status:** Accepted
+- **Context:** Speaker verification must become an authorization boundary, not
+  just an informational response.
+- **Decision:** Derive the operator from the device, issue a 60-second Ed25519
+  JWT after a voice match, and atomically consume it on one start/stop attempt.
+- **Consequences:** Callers cannot choose their operator ID, replaying a token
+  for a second action is refused, and each action is auditable and idempotent.
+
+## 2026-10-24 — Keep speaker verification and enrollment local
+
+- **Status:** Accepted
+- **Context:** The hackathon needs a reproducible demo without a hosted biometric
+  provider, and enrollment is a privileged operation.
+- **Decision:** Pin SpeechBrain ECAPA-TDNN under `models/`, store only normalized
+  embeddings in SQLite, and expose enrollment through a local CLI rather than
+  MCP.
+- **Consequences:** Runtime inference is offline and raw enrollment audio is not
+  persisted by the backend. Replay and synthetic-voice protection remain future
+  work.
+
+## 2026-10-24 — Use persistent transactional SQLite simulation
+
+- **Status:** Accepted
+- **Context:** No real datacenter database or control plane is available.
+- **Decision:** Automatically seed local operators, devices, server assignments,
+  and server states. Mutate state and audit in one transaction.
+- **Consequences:** The pilot is deterministic and survives restarts, but SQLite
+  and the simulated controls are not a production deployment design.

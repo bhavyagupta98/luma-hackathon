@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.db
+*.db-shm
+*.db-wal
+data/*.pem
+samples/
+dist/
+build/
+*.egg-info/
+models/**/.cache/
+models/**/.runtime/

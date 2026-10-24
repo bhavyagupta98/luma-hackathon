@@ -2,26 +2,38 @@
 
 ## Purpose
 
-Describe the product, its users, and the problem it solves here.
+Voice-authenticated, screen-independent control of simulated datacenter server
+power for the hackathon's No App track.
 
 ## Current State
 
-This repository is newly initialized. The application stack, architecture, and
-development commands have not been selected yet.
+The Python backend exposes MCP tools for local speaker verification, signed
+server control, and organization-scoped user administration. It uses a pinned
+local ECAPA-TDNN model and a seeded, persistent SQLite database.
 
 ## Goals
 
-- Define the initial product scope.
-- Choose the smallest suitable application stack.
-- Document setup and verification commands in `README.md` and `AGENTS.md`.
+- Authenticate an enrolled operator without accepting a claimed operator ID.
+- Issue a short-lived, one-action signed identity token.
+- Start or stop only an assigned simulated server.
+- Bootstrap the first organization admin locally.
+- Let a voice-authenticated admin add another admin or operator with complete
+  identity, device, and server-assignment details.
+- Return a natural `spoken_message` and audit every attempt.
 
 ## Constraints
 
-- Keep secrets and local environment values out of version control.
-- Prefer simple, reversible decisions while the project is taking shape.
+- No real server-management integration in the pilot.
+- No operator-facing screen or manual approval in the core flow.
+- Never commit signing keys, recordings, voice databases, or other biometric
+  artifacts.
+- Do not present speaker similarity as production-grade authentication.
 
-## Open Questions
+## Next Phase
 
-- What is the first user-facing workflow?
-- Which runtime, framework, and deployment target will be used?
-- What checks must pass before a change is considered complete?
+- Add live audio capture to the eventual voice host.
+- Add transcription and strict `start|stop + server ID` intent parsing.
+- Add transcription and structured parsing for spoken user-administration
+  commands.
+- Add challenge-response and replay/synthetic-speech defenses.
+- Protect MCP Streamable HTTP with OAuth and production key management.

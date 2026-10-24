@@ -17,3 +17,7 @@ Useful project commands:
 - `/bootstrap` — orient to the repository before starting work.
 - `/check` — run the appropriate verification and review the diff.
 - `/handoff` — summarize unfinished work for the next session.
+
+Project-specific skills live in `.claude/skills/` and cover datacenter control,
+voice authentication, testing, and No App validation. Use the relevant skill
+whenever changing or validating the authorization flow.

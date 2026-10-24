@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "luma-datacenter-voice"
+version = "0.3.0"
+description = "Voice-authenticated simulated datacenter server control over MCP"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp>=2,<3",
+  "pyjwt[crypto]>=2.10,<3",
+  "speechbrain>=1.0,<2",
+  "sounddevice>=0.5,<1",
+  "torch>=2.6,<3",
+  "torchaudio>=2.6,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pyyaml>=6,<7",
+  "pytest>=8,<10",
+  "ruff>=0.14,<1",
+]
+
+[project.scripts]
+luma-backend-mcp = "luma_datacenter.backend_mcp:main"
+luma-bootstrap-admin = "luma_datacenter.bootstrap_admin:main"
+luma-enroll-voice = "luma_datacenter.enroll_voice:main"
+luma-record-voice = "luma_datacenter.record_voice:main"
+luma-voice-pilot = "luma_datacenter.pilot:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/luma_datacenter"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
