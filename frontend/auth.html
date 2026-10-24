@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Luma Voice Sign-in</title>
+  <style>
+    :root {
+      --bg: #000;
+      --fg: #8a8a8a;
+      --dim: #333;
+      --idle: #555;
+      --busy: #eab308;
+      --listening: #3b82f6;
+      --ok: #22c55e;
+      --fail: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--fg);
+      font: 16px/1.4 system-ui, sans-serif;
+      user-select: none;
+      touch-action: none;
+    }
+    main {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+    #dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--idle);
+      transition: background 0.15s;
+    }
+    #dot[data-state="loading"], #dot[data-state="processing"] { background: var(--busy); }
+    #dot[data-state="recording"] { background: var(--listening); }
+    #dot[data-state="verified"] { background: var(--ok); }
+    #dot[data-state="refused"] { background: var(--fail); }
+    #status { max-width: 32ch; }
+    #hint { color: var(--dim); font-size: 13px; }
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--fg);
+      font-size: 20px;
+      text-align: center;
+      cursor: pointer;
+    }
+    #overlay[hidden] { display: none; }
+    #log {
+      position: fixed;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      max-height: 40%;
+      overflow: auto;
+      margin: 0;
+      padding: 8px;
+      border: 1px solid var(--dim);
+      font: 12px/1.4 ui-monospace, monospace;
+      white-space: pre-wrap;
+      text-align: left;
+    }
+    #log[hidden] { display: none; }
+    #log a { color: var(--fg); }
+  </style>
+</head>
+<body>
+  <main>
+    <div id="dot" data-state="idle" aria-hidden="true"></div>
+    <div id="status" role="status" aria-live="polite">Voice sign-in</div>
+    <div id="hint">Hold Space or touch and hold to speak</div>
+  </main>
+  <div id="overlay" role="button" tabindex="0">Tap to start voice sign-in</div>
+  <div id="log" hidden></div>
+  <script type="module" src="auth.js"></script>
+</body>
+</html>
