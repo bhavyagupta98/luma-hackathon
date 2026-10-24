@@ -30,9 +30,9 @@ def authenticated_admin(tmp_path):
     )
     voice = VoiceAuthService(database, FakeVoiceEmbedder(), signer, default_threshold=0.75)
     voice.enroll("OP-100", [b"admin-enrollment"])
-    authentication = voice.authenticate("DC-D-100", b"admin-voice")
-    assert authentication.authentication_token
-    claims = voice.verify_token(authentication.authentication_token)
+    authentication = voice.authenticate("DC-D-100", b"admin-voice", "user.add")
+    assert authentication.authorization_signature
+    claims = voice.verify_token(authentication.authorization_signature)
     return database, voice, UserAdministrationService(database), claims
 
 
@@ -42,7 +42,9 @@ def registration(claims, **overrides) -> UserRegistrationRequest:
         "actor_operator_id": str(claims["sub"]),
         "actor_device_id": str(claims["device_id"]),
         "actor_organization_id": str(claims["organization_id"]),
-        "actor_scope": str(claims["scope"]),
+        "actor_roles": tuple(claims["roles"]),
+        "actor_permissions": tuple(claims["permissions"]),
+        "actor_authorized_tasks": tuple(claims["tasks"]),
         "token_jti": str(claims["jti"]),
         "organization_id": "ORG-DEMO",
         "user_id": "OP-NEW",
@@ -73,10 +75,10 @@ def test_admin_can_add_operator_with_device_and_server_assignment(tmp_path) -> N
     assert membership["role"] == "operator"
 
     enrollment = voice.enroll("OP-NEW", [b"new-user-voice"])
-    authenticated = voice.authenticate("DC-D-NEW", b"new-user-voice")
+    authenticated = voice.authenticate("DC-D-NEW", b"new-user-voice", "server.start")
     assert enrollment.enrolled is True
     assert authenticated.authenticated is True
-    assert authenticated.role == "operator"
+    assert authenticated.roles == ("operator",)
 
 
 def test_admin_can_add_another_admin(tmp_path) -> None:
@@ -121,23 +123,11 @@ def test_operator_role_cannot_add_users(tmp_path) -> None:
     added = admin_service.add_user(registration(admin_claims))
     assert added.approved
     voice.enroll("OP-NEW", [b"new-user-voice"])
-    operator_auth = voice.authenticate("DC-D-NEW", b"new-user-voice")
-    assert operator_auth.authentication_token
-    operator_claims = voice.verify_token(operator_auth.authentication_token)
+    operator_auth = voice.authenticate("DC-D-NEW", b"new-user-voice", "user.add")
 
-    result = admin_service.add_user(
-        registration(
-            operator_claims,
-            request_id="operator-add",
-            user_id="OP-FORBIDDEN",
-            display_name="Forbidden",
-            device_id="DC-FORBIDDEN",
-        )
-    )
-
-    assert result.approved is False
-    assert result.code == "INSUFFICIENT_SCOPE"
-    assert len(admin_service.list_events()) == 2
+    assert operator_auth.authenticated is False
+    assert operator_auth.code == "TASK_NOT_AUTHORIZED"
+    assert len(admin_service.list_events()) == 1
 
 
 def test_local_bootstrap_creates_first_admin_identity(tmp_path) -> None:
@@ -177,28 +167,31 @@ async def test_mcp_admin_voice_can_add_user_with_all_required_details(tmp_path) 
 
     async with Client(server) as client:
         auth_response = await client.call_tool(
-            "authenticate_voice",
+            "execute_task",
             {
+                "task": "authenticate",
                 "device_id": "DC-D-100",
-                "audio_base64": base64.b64encode(b"admin-voice").decode("ascii"),
+                "voice_audio_base64": base64.b64encode(b"admin-voice").decode("ascii"),
+                "requested_task": "user.add",
             },
         )
         authentication = dict(auth_response.structured_content or {})
         add_response = await client.call_tool(
-            "add_organization_user",
+            "execute_task",
             {
-                "authentication_token": authentication["authentication_token"],
+                "task": "user.add",
+                "authorization_signature": authentication["authorization"]["signature"],
                 "request_id": "mcp-add-user",
                 "organization_id": "ORG-DEMO",
                 "user_id": "OP-MCP",
                 "display_name": "MCP Operator",
                 "role": "operator",
-                "device_id": "DC-D-MCP",
+                "user_device_id": "DC-D-MCP",
                 "server_ids": ["SRV-100"],
             },
         )
 
     result = dict(add_response.structured_content or {})
-    assert result["approved"] is True
+    assert result["authorized"] is True
     assert result["code"] == "USER_ADDED_VOICE_ENROLLMENT_REQUIRED"
     assert result["spoken_message"]

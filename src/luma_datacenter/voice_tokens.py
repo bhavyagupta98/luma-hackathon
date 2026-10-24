@@ -56,8 +56,9 @@ class VoiceTokenSigner:
         operator_id: str,
         device_id: str,
         organization_id: str,
-        role: str,
-        scopes: list[str],
+        roles: list[str],
+        permissions: list[str],
+        tasks: list[str],
         audio_sha256: str,
         similarity_score: float,
     ) -> IssuedVoiceToken:
@@ -70,11 +71,12 @@ class VoiceTokenSigner:
             "sub": operator_id,
             "device_id": device_id,
             "organization_id": organization_id,
-            "role": role,
+            "roles": sorted(set(roles)),
+            "permissions": sorted(set(permissions)),
+            "tasks": sorted(set(tasks)),
             "auth_id": auth_id,
             "audio_sha256": audio_sha256,
             "similarity_score": round(similarity_score, 6),
-            "scope": " ".join(sorted(scopes)),
             "jti": jti,
             "iat": issued_at,
             "exp": expires_at,
@@ -89,7 +91,7 @@ class VoiceTokenSigner:
 
     def verify(self, token: str) -> dict[str, Any]:
         try:
-            return dict(
+            claims = dict(
                 jwt.decode(
                     token,
                     self._private_key.public_key(),
@@ -103,9 +105,10 @@ class VoiceTokenSigner:
                             "sub",
                             "device_id",
                             "organization_id",
-                            "role",
+                            "roles",
                             "auth_id",
-                            "scope",
+                            "permissions",
+                            "tasks",
                             "jti",
                             "iat",
                             "exp",
@@ -115,6 +118,15 @@ class VoiceTokenSigner:
             )
         except jwt.PyJWTError as exc:
             raise VoiceTokenError("Invalid or expired voice authentication token") from exc
+        for claim_name in ("roles", "permissions", "tasks"):
+            values = claims.get(claim_name)
+            if not isinstance(values, list) or not values or not all(
+                isinstance(value, str) and value for value in values
+            ):
+                raise VoiceTokenError(f"Voice authorization {claim_name} claim is invalid")
+        if len(claims["tasks"]) != 1:
+            raise VoiceTokenError("Voice authorization must contain exactly one task")
+        return claims
 
     def public_key_pem(self) -> str:
         return self._private_key.public_key().public_bytes(

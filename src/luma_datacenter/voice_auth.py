@@ -8,6 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 from .database import Database
+from .policy import authorize_task
 from .voice_embeddings import VoiceEmbedder, VoiceEmbeddingError
 from .voice_tokens import VoiceTokenError, VoiceTokenSigner
 
@@ -33,9 +34,11 @@ class VoiceAuthenticationResult:
     operator_id: str | None
     device_id: str
     organization_id: str | None = None
-    role: str | None = None
+    roles: tuple[str, ...] = ()
+    permissions: tuple[str, ...] = ()
+    tasks: tuple[str, ...] = ()
     similarity_score: float | None = None
-    authentication_token: str | None = None
+    authorization_signature: str | None = None
     expires_at: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -111,7 +114,9 @@ class VoiceAuthService:
             f"Voice enrollment completed for operator {operator_id}.",
         )
 
-    def authenticate(self, device_id: str, audio: bytes) -> VoiceAuthenticationResult:
+    def authenticate(
+        self, device_id: str, audio: bytes, requested_task: str
+    ) -> VoiceAuthenticationResult:
         auth_id = str(uuid4())
         audio_sha256 = hashlib.sha256(audio).hexdigest() if audio else None
         with self.database.connect() as connection:
@@ -199,13 +204,26 @@ class VoiceAuthService:
                 score,
             )
 
+        authorization = authorize_task(role, requested_task)
+        if authorization is None:
+            return self._record_refusal(
+                auth_id,
+                device_id,
+                operator_id,
+                "TASK_NOT_AUTHORIZED",
+                "Your voice was verified, but you are not authorized to perform that task.",
+                audio_sha256,
+                score,
+            )
+
         issued = self.signer.issue(
             auth_id=auth_id,
             operator_id=operator_id,
             device_id=device_id,
             organization_id=organization_id,
-            role=role,
-            scopes=self._scopes_for_role(role),
+            roles=list(authorization.roles),
+            permissions=list(authorization.permissions),
+            tasks=list(authorization.tasks),
             audio_sha256=audio_sha256 or "",
             similarity_score=score,
         )
@@ -213,13 +231,15 @@ class VoiceAuthService:
             auth_id=auth_id,
             authenticated=True,
             code="VOICE_AUTHENTICATED",
-            spoken_message="Voice verified. You can continue with the server command.",
+            spoken_message="Voice verified. You are authorized to continue with that task.",
             operator_id=operator_id,
             device_id=device_id,
             organization_id=organization_id,
-            role=role,
+            roles=authorization.roles,
+            permissions=authorization.permissions,
+            tasks=authorization.tasks,
             similarity_score=round(score, 6),
-            authentication_token=issued.token,
+            authorization_signature=issued.token,
             expires_at=issued.expires_at,
         )
         with self.database.transaction() as connection:
@@ -245,6 +265,11 @@ class VoiceAuthService:
         return result
 
     def reject_invalid_audio(self, device_id: str, message: str) -> VoiceAuthenticationResult:
+        return self.reject_request(device_id, "INVALID_AUDIO", message)
+
+    def reject_request(
+        self, device_id: str, code: str, message: str
+    ) -> VoiceAuthenticationResult:
         with self.database.connect() as connection:
             device = connection.execute(
                 "SELECT operator_id FROM datacenter_devices WHERE id = ?", (device_id,)
@@ -253,7 +278,7 @@ class VoiceAuthService:
             str(uuid4()),
             device_id,
             str(device["operator_id"]) if device is not None else None,
-            "INVALID_AUDIO",
+            code,
             message,
             None,
         )
@@ -273,22 +298,17 @@ class VoiceAuthService:
             raise VoiceTokenError("Voice authentication token is not recognized")
         if stored["operator_id"] != claims["sub"] or stored["device_id"] != claims["device_id"]:
             raise VoiceTokenError("Voice authentication token claims do not match")
-        if (
-            stored["organization_id"] != claims["organization_id"]
-            or stored["role"] != claims["role"]
-        ):
+        if stored["organization_id"] != claims["organization_id"]:
             raise VoiceTokenError("Voice authentication organization claims do not match")
+        expected = authorize_task(str(stored["role"]), str(claims["tasks"][0]))
+        if (
+            expected is None
+            or tuple(claims["roles"]) != expected.roles
+            or tuple(claims["permissions"]) != expected.permissions
+            or tuple(claims["tasks"]) != expected.tasks
+        ):
+            raise VoiceTokenError("Voice authorization policy claims do not match")
         return claims
-
-    @staticmethod
-    def _scopes_for_role(role: str) -> list[str]:
-        if role == "org_admin":
-            return [
-                "organization:admins:create",
-                "organization:members:create",
-                "server:control",
-            ]
-        return ["server:control"]
 
     def list_events(self, limit: int = 50) -> list[dict[str, Any]]:
         safe_limit = max(1, min(limit, 200))

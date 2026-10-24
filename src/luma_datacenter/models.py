@@ -12,7 +12,9 @@ class ServerActionRequest:
     operator_id: str
     device_id: str
     organization_id: str
-    scope: str
+    roles: tuple[str, ...]
+    permissions: tuple[str, ...]
+    authorized_tasks: tuple[str, ...]
     server_id: str
     action: str
     token_jti: str
@@ -37,7 +39,9 @@ class UserRegistrationRequest:
     actor_operator_id: str
     actor_device_id: str
     actor_organization_id: str
-    actor_scope: str
+    actor_roles: tuple[str, ...]
+    actor_permissions: tuple[str, ...]
+    actor_authorized_tasks: tuple[str, ...]
     token_jti: str
     organization_id: str
     user_id: str

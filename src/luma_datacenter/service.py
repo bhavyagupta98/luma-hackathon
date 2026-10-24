@@ -6,6 +6,7 @@ from typing import Any
 
 from .database import Database
 from .models import ServerActionRequest, ServerActionResult
+from .policy import SERVER_START_TASK, SERVER_STOP_TASK
 
 
 class ServerControlService:
@@ -74,7 +75,18 @@ class ServerControlService:
     def reject_unverified(
         self, request_id: str, server_id: str, action: str, message: str
     ) -> ServerActionResult:
-        request = ServerActionRequest(request_id, "", "", "", "", server_id, action, "")
+        request = ServerActionRequest(
+            request_id=request_id,
+            operator_id="",
+            device_id="",
+            organization_id="",
+            roles=(),
+            permissions=(),
+            authorized_tasks=(),
+            server_id=server_id,
+            action=action,
+            token_jti="",
+        )
         result = self._blocked(request, "AUTHENTICATION_REQUIRED", message)
         with self.database.transaction() as connection:
             previous = connection.execute(
@@ -106,10 +118,19 @@ class ServerControlService:
             return self._blocked(
                 request, "ACTION_NOT_SUPPORTED", "I can only start or stop a server."
             )
-        if "server:control" not in request.scope.split():
+        required_task = (
+            SERVER_START_TASK if request.action == "start" else SERVER_STOP_TASK
+        )
+        if required_task not in request.authorized_tasks:
             return self._blocked(
                 request,
-                "INSUFFICIENT_SCOPE",
+                "TASK_NOT_AUTHORIZED",
+                "Your voice verification was not authorized for that task.",
+            )
+        if "server:control" not in request.permissions:
+            return self._blocked(
+                request,
+                "INSUFFICIENT_PERMISSION",
                 "You are not authorized to control datacenter servers.",
             )
 

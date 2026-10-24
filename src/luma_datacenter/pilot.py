@@ -19,19 +19,22 @@ def main() -> None:
     args = parser.parse_args()
 
     runtime = build_runtime()
-    authentication = runtime.voice.authenticate(args.device, args.audio.read_bytes())
+    task = f"server.{args.action}"
+    authentication = runtime.voice.authenticate(args.device, args.audio.read_bytes(), task)
     print(authentication.spoken_message)
-    if not authentication.authenticated or authentication.authentication_token is None:
+    if not authentication.authenticated or authentication.authorization_signature is None:
         raise SystemExit(1)
 
-    claims = runtime.voice.verify_token(authentication.authentication_token)
+    claims = runtime.voice.verify_token(authentication.authorization_signature)
     result = runtime.actions.execute(
         ServerActionRequest(
             request_id=str(uuid4()),
             operator_id=str(claims["sub"]),
             device_id=str(claims["device_id"]),
             organization_id=str(claims["organization_id"]),
-            scope=str(claims["scope"]),
+            roles=tuple(str(value) for value in claims["roles"]),
+            permissions=tuple(str(value) for value in claims["permissions"]),
+            authorized_tasks=tuple(str(value) for value in claims["tasks"]),
             server_id=args.server,
             action=args.action,
             token_jti=str(claims["jti"]),

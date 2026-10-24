@@ -96,11 +96,26 @@ luma-backend-mcp --transport streamable-http --port 8000
 
 Connect an MCP client to `http://127.0.0.1:8000/mcp`. The operator flow is:
 
-1. Call `authenticate_voice` with `DC-D-100` and a base64 PCM WAV.
+1. Call `execute_task` with `task=authenticate`, `DC-D-100`, a base64 PCM WAV,
+   and one `requested_task` such as `server.start`.
 2. Speak its `spoken_message`.
-3. Pass the returned token to `execute_server_action` with `SRV-100` and
-   `start`, or `SRV-200` and `stop`.
+3. Pass `authorization.signature` to `execute_task` with that exact requested
+   task and its target fields.
 4. Speak the action result's `spoken_message`.
+
+Successful authentication returns the signed authorization shape:
+
+```json
+{
+  "signature": "<short-lived Ed25519 JWT>",
+  "roles": ["org_admin"],
+  "permissions": ["server:control"],
+  "tasks": ["server.start"]
+}
+```
+
+The signature is task-bound and single-use. A `server.start` signature cannot
+authorize `server.stop` or `user.add`.
 
 Developer tools `describe_pilot`, `list_voice_auth_events`, and
 `list_server_action_events` expose the seeded setup and audit logs.
@@ -112,24 +127,25 @@ Supported organization roles:
 - `org_admin` — can add admins/operators and control assigned servers.
 - `operator` — can only control assigned servers.
 
-After an admin calls `authenticate_voice`, pass that fresh token to
-`add_organization_user`. Every field is required:
+First call `execute_task` with `task=authenticate` and
+`requested_task=user.add`. Then call `execute_task` again with every user field:
 
 ```json
 {
-  "authentication_token": "<signed admin voice token>",
+  "task": "user.add",
+  "authorization_signature": "<signed admin voice authorization>",
   "request_id": "add-alice-001",
   "organization_id": "ORG-DEMO",
   "user_id": "OP-ALICE",
   "display_name": "Alice Smith",
   "role": "operator",
-  "device_id": "DEV-ALICE-1",
+  "user_device_id": "DEV-ALICE-1",
   "server_ids": ["SRV-100"]
 }
 ```
 
 Use `"role": "org_admin"` and an empty or populated `server_ids` list to add
-another administrator. The admin token is consumed by the attempt, whether it
+another administrator. The admin signature is consumed by the attempt, whether it
 succeeds or is refused.
 
 The newly added person must capture and enroll their own voice:

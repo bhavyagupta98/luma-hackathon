@@ -14,10 +14,11 @@ Preserve these invariants:
 - Every expected result and refusal has a short natural `spoken_message`.
 - Derive the operator from the verified token and device mapping; never accept
   a caller-supplied operator ID as identity.
-- A voice token is short-lived, organization- and role-scoped, and consumable
-  for one server-control or user-administration attempt only.
+- A voice authorization signature is short-lived, organization-scoped,
+  consumable once, and bound to exactly one requested task. Its signed claims
+  contain `roles`, task-scoped `permissions`, and `tasks` arrays.
 - Only `org_admin` may add users. Creating another admin requires the dedicated
-  admin-creation scope; an operator may never escalate roles.
+  `organization:admins:create` permission; an operator may never escalate roles.
 - The first admin is local-bootstrap only, and every later user must enroll
   their own voice after their identity and device are created.
 - Only `start` and `stop` are supported, and they affect seeded SQLite servers,

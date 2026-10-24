@@ -7,14 +7,15 @@ power for the hackathon's No App track.
 
 ## Current State
 
-The Python backend exposes MCP tools for local speaker verification, signed
-server control, and organization-scoped user administration. It uses a pinned
+The Python backend exposes one task-oriented MCP contract for local speaker
+verification, signed server control, and organization-scoped user administration. It uses a pinned
 local ECAPA-TDNN model and a seeded, persistent SQLite database.
 
 ## Goals
 
 - Authenticate an enrolled operator without accepting a claimed operator ID.
-- Issue a short-lived, one-action signed identity token.
+- Issue a short-lived, one-action signature containing `roles`, task-scoped
+  `permissions`, and exactly one authorized task.
 - Start or stop only an assigned simulated server.
 - Bootstrap the first organization admin locally.
 - Let a voice-authenticated admin add another admin or operator with complete

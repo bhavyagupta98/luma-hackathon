@@ -8,10 +8,11 @@ from uuid import uuid4
 
 from .database import Database
 from .models import UserRegistrationRequest, UserRegistrationResult
+from .policy import USER_ADD_TASK
 
 
 class UserAdministrationService:
-    """Adds organization-scoped users through a one-use admin voice token."""
+    """Adds organization-scoped users through a one-use admin voice signature."""
 
     def __init__(self, database: Database) -> None:
         self.database = database
@@ -40,18 +41,20 @@ class UserAdministrationService:
         server_ids: tuple[str, ...],
     ) -> UserRegistrationResult:
         request = UserRegistrationRequest(
-            request_id,
-            "",
-            "",
-            "",
-            "",
-            "",
-            organization_id,
-            user_id,
-            display_name,
-            role,
-            device_id,
-            server_ids,
+            request_id=request_id,
+            actor_operator_id="",
+            actor_device_id="",
+            actor_organization_id="",
+            actor_roles=(),
+            actor_permissions=(),
+            actor_authorized_tasks=(),
+            token_jti="",
+            organization_id=organization_id,
+            user_id=user_id,
+            display_name=display_name,
+            role=role,
+            device_id=device_id,
+            server_ids=server_ids,
         )
         result = self._blocked(
             request,
@@ -158,16 +161,20 @@ class UserAdministrationService:
                 "You can only add users to your own organization.",
             )
 
-        scopes = set(request.actor_scope.split())
-        required_scope = (
+        required_permission = (
             "organization:admins:create"
             if request.role == "org_admin"
             else "organization:members:create"
         )
-        if required_scope not in scopes or token["role"] != "org_admin":
+        if (
+            USER_ADD_TASK not in request.actor_authorized_tasks
+            or required_permission not in request.actor_permissions
+            or "org_admin" not in request.actor_roles
+            or token["role"] != "org_admin"
+        ):
             return self._blocked(
                 request,
-                "INSUFFICIENT_SCOPE",
+                "INSUFFICIENT_PERMISSION",
                 "You are not authorized to add a user with that role.",
             )
 

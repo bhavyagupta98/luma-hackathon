@@ -5,7 +5,8 @@ description: Validate that Luma's datacenter pilot completes authentication and 
 
 # Validate No App
 
-Trace `authenticate_voice` through `execute_server_action`. Fail validation if
+Trace `execute_task(task=authenticate)` through the matching functional
+`execute_task` call. Fail validation if
 the core flow requires a screen, click, visual confirmation, or manual approval.
 
 Confirm that authentication, approval, and refusal results have non-empty
@@ -13,6 +14,9 @@ Confirm that authentication, approval, and refusal results have non-empty
 are audited; and documentation clearly states that the servers and biometric
 authentication are simulations.
 
-For user administration, confirm that a signed admin voice token is required,
+Confirm the authorization signature contains `roles`, task-scoped
+`permissions`, and one `tasks` value, and that cross-task use is refused.
+
+For user administration, confirm that a signed admin voice authorization is required,
 the structured call supplies every registration field, and the new person—not
 the existing admin—enrolls the new voice profile.

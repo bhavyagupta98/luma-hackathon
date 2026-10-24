@@ -1,5 +1,19 @@
 # Decision Log
 
+## 2026-10-24 — Bind voice authorization to one explicit task
+
+- **Status:** Accepted
+- **Context:** Authentication and functional work need one MCP task contract,
+  with authorization expressed as roles, permissions, and tasks.
+- **Decision:** Use `execute_task` for both phases. Voice authentication names
+  one intended functional task and returns a short-lived Ed25519 signature over
+  `roles`, task-scoped `permissions`, and exactly one allowed `tasks` value.
+  Execution verifies all three claims and atomically consumes the signature.
+- **Consequences:** A signature for `server.start` cannot be reused for
+  `server.stop` or `user.add`. The frontend still performs audio capture,
+  transcription, and intent extraction; the backend owns voice matching,
+  authorization, mutation, and audit.
+
 ## 2026-10-24 — Add organization-scoped voice administration
 
 - **Status:** Accepted

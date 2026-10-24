@@ -19,7 +19,7 @@ class FakeVoiceEmbedder:
         raise VoiceEmbeddingError("Audio could not be processed")
 
 
-def build_authenticated_services(tmp_path):
+def build_authenticated_services(tmp_path, task: str = "server.start"):
     database = Database(tmp_path / "datacenter.db")
     signer = VoiceTokenSigner(
         tmp_path / "key.pem", issuer="test", audience="datacenter", ttl_seconds=60
@@ -28,9 +28,9 @@ def build_authenticated_services(tmp_path):
         database, FakeVoiceEmbedder(), signer, default_threshold=0.75
     )
     voice.enroll("OP-100", [b"enrollment-one"])
-    authentication = voice.authenticate("DC-D-100", b"matching-voice")
-    assert authentication.authentication_token
-    claims = voice.verify_token(authentication.authentication_token)
+    authentication = voice.authenticate("DC-D-100", b"matching-voice", task)
+    assert authentication.authorization_signature
+    claims = voice.verify_token(authentication.authorization_signature)
     return database, ServerControlService(database), claims
 
 
@@ -40,7 +40,9 @@ def request(claims, *, request_id: str, server_id: str, action: str) -> ServerAc
         operator_id=str(claims["sub"]),
         device_id=str(claims["device_id"]),
         organization_id=str(claims["organization_id"]),
-        scope=str(claims["scope"]),
+        roles=tuple(claims["roles"]),
+        permissions=tuple(claims["permissions"]),
+        authorized_tasks=tuple(claims["tasks"]),
         server_id=server_id,
         action=action,
         token_jti=str(claims["jti"]),
@@ -86,7 +88,7 @@ def test_same_request_is_idempotent_even_after_token_consumption(tmp_path) -> No
 
 
 def test_operator_cannot_control_unassigned_server(tmp_path) -> None:
-    _, service, claims = build_authenticated_services(tmp_path)
+    _, service, claims = build_authenticated_services(tmp_path, "server.stop")
 
     result = service.execute(
         request(claims, request_id="restricted", server_id="SRV-300", action="stop")
@@ -94,6 +96,18 @@ def test_operator_cannot_control_unassigned_server(tmp_path) -> None:
 
     assert result.authorized is False
     assert result.code == "SERVER_NOT_ASSIGNED"
+    assert result.spoken_message
+
+
+def test_signature_cannot_execute_a_different_task(tmp_path) -> None:
+    _, service, claims = build_authenticated_services(tmp_path, "server.start")
+
+    result = service.execute(
+        request(claims, request_id="wrong-task", server_id="SRV-200", action="stop")
+    )
+
+    assert result.authorized is False
+    assert result.code == "TASK_NOT_AUTHORIZED"
     assert result.spoken_message
 
 
