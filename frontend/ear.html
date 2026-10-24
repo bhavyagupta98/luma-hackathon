@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Luma Earpiece</title>
+  <style>
+    :root {
+      --bg: #000;
+      --fg: #8a8a8a;
+      --dim: #333;
+      --idle: #555;
+      --listening: #3b82f6;
+      --speaking: #22c55e;
+      --offline: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--fg);
+      font: 16px/1.4 system-ui, sans-serif;
+      user-select: none;
+      touch-action: none;
+    }
+    main {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+    #dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--offline);
+      transition: background 0.15s;
+    }
+    #dot[data-state="idle"] { background: var(--idle); }
+    #dot[data-state="listening"] { background: var(--listening); }
+    #dot[data-state="speaking"] { background: var(--speaking); }
+    #hint { color: var(--dim); font-size: 13px; }
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      color: var(--fg);
+      font-size: 20px;
+      cursor: pointer;
+    }
+    #overlay[hidden] { display: none; }
+    #log {
+      position: fixed;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      max-height: 40%;
+      overflow: auto;
+      margin: 0;
+      padding: 8px;
+      border: 1px solid var(--dim);
+      font: 12px/1.4 ui-monospace, monospace;
+      white-space: pre-wrap;
+      text-align: left;
+    }
+    #log[hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <div id="dot" data-state="offline" aria-hidden="true"></div>
+    <div id="name">Connecting…</div>
+    <div id="hint">Hold Space or touch and hold to talk</div>
+  </main>
+  <div id="overlay" role="button" tabindex="0">Tap to start the earpiece</div>
+  <pre id="log" hidden></pre>
+  <script type="module" src="ear.js"></script>
+</body>
+</html>

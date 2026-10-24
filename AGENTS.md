@@ -48,6 +48,8 @@ testing, and No App validation invariants.
 - `models/` — pinned local speaker-verification model and provenance.
 - `scripts/` — deterministic model download and integrity verification.
 - `tests/` — domain, voice-model, signed-token, and MCP acceptance tests.
+- `docs/CONTRACT.md` — hackathon interfaces, file ownership, demo script.
+- `docs/ROADMAP.md` — 3-hour plan and per-person prompts.
 - `docs/agent/CONTEXT.md` — current goals, constraints, and project state.
 - `docs/agent/ARCHITECTURE.md` — component and policy design.
 - `docs/agent/DECISIONS.md` — lightweight architecture decision log.
