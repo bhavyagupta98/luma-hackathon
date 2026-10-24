@@ -14,16 +14,16 @@ Preserve these invariants:
 - Every expected result and refusal has a short natural `spoken_message`.
 - Derive the operator from the verified token and device mapping; never accept
   a caller-supplied operator ID as identity.
-- A voice authorization signature is short-lived, organization-scoped,
-  consumable once, and bound to exactly one requested task. Its signed claims
-  contain `roles`, task-scoped `permissions`, and `tasks` arrays.
+- A voice session is signed, organization-scoped, expires after 60 seconds,
+  and contains backend-derived `roles`, task-scoped `permissions`, and `tasks`.
+  Never trust role or permission arrays supplied by a browser.
 - Only `org_admin` may add users. Creating another admin requires the dedicated
   `organization:admins:create` permission; an operator may never escalate roles.
 - The first admin is local-bootstrap only, and every later user must enroll
   their own voice after their identity and device are created.
-- Only `start` and `stop` are supported, and they affect seeded SQLite servers,
+- Only `restart` and `fix` are supported, and they affect seeded SQLite servers,
   never real infrastructure.
-- State mutation, token consumption, and auditing stay transactional; retries
+- State mutation and auditing stay transactional; retries
   with the same `request_id` are idempotent.
 - Keep voice inference offline from pinned `models/` files and keep enrollment
   local-only.

@@ -6,7 +6,7 @@ from typing import Any
 
 from .database import Database
 from .models import ServerActionRequest, ServerActionResult
-from .policy import SERVER_START_TASK, SERVER_STOP_TASK
+from .policy import SERVER_FIX_TASK, SERVER_RESTART_TASK
 
 
 class ServerControlService:
@@ -37,7 +37,7 @@ class ServerControlService:
                     "AUTHENTICATION_REQUIRED",
                     "I couldn't verify your authentication. Please verify your voice again.",
                 )
-            elif token["consumed_at"] is not None:
+            elif token["consumed_at"] is not None and len(request.authorized_tasks) == 1:
                 result = self._blocked(
                     request,
                     "AUTHENTICATION_ALREADY_USED",
@@ -60,13 +60,12 @@ class ServerControlService:
                     "I couldn't verify your authentication. Please verify your voice again.",
                 )
             else:
-                connection.execute(
-                    """
-                    UPDATE operator_voice_auth_tokens
-                    SET consumed_at = CURRENT_TIMESTAMP WHERE jti = ?
-                    """,
-                    (request.token_jti,),
-                )
+                if len(request.authorized_tasks) == 1:
+                    connection.execute(
+                        """UPDATE operator_voice_auth_tokens
+                           SET consumed_at=CURRENT_TIMESTAMP WHERE jti=?""",
+                        (request.token_jti,),
+                    )
                 result = self._evaluate(connection, request)
 
             self._record(connection, request, result)
@@ -114,20 +113,19 @@ class ServerControlService:
     def _evaluate(
         self, connection: sqlite3.Connection, request: ServerActionRequest
     ) -> ServerActionResult:
-        if request.action not in {"start", "stop"}:
+        if request.action not in {"restart", "fix"}:
             return self._blocked(
-                request, "ACTION_NOT_SUPPORTED", "I can only start or stop a server."
+                request, "ACTION_NOT_SUPPORTED", "I can only restart or fix a server."
             )
-        required_task = (
-            SERVER_START_TASK if request.action == "start" else SERVER_STOP_TASK
-        )
+        required_task = SERVER_RESTART_TASK if request.action == "restart" else SERVER_FIX_TASK
         if required_task not in request.authorized_tasks:
             return self._blocked(
                 request,
                 "TASK_NOT_AUTHORIZED",
                 "Your voice verification was not authorized for that task.",
             )
-        if "server:control" not in request.permissions:
+        required_permission = "server:restart" if request.action == "restart" else "server:repair"
+        if required_permission not in request.permissions:
             return self._blocked(
                 request,
                 "INSUFFICIENT_PERMISSION",
@@ -157,7 +155,7 @@ class ServerControlService:
             (request.operator_id, request.server_id, request.organization_id),
         ).fetchone()
         server = connection.execute(
-            "SELECT status FROM servers WHERE id = ?", (request.server_id,)
+            "SELECT status, health FROM servers WHERE id = ?", (request.server_id,)
         ).fetchone()
         if server is None:
             return self._blocked(request, "SERVER_NOT_FOUND", "I couldn't find that server.")
@@ -169,27 +167,25 @@ class ServerControlService:
                 server["status"],
             )
 
-        desired_status = "running" if request.action == "start" else "stopped"
-        if server["status"] == desired_status:
-            return self._blocked(
-                request,
-                "SERVER_ALREADY_IN_STATE",
-                f"Server {request.server_id} is already {desired_status}.",
-                server["status"],
+        if request.action == "restart":
+            connection.execute(
+                "UPDATE servers SET status='running', updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (request.server_id,),
             )
-
-        connection.execute(
-            "UPDATE servers SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (desired_status, request.server_id),
-        )
-        action_word = "started" if request.action == "start" else "stopped"
+            message = f"Task successful. Server {request.server_id} has been restarted."
+        else:
+            connection.execute(
+                "UPDATE servers SET health='healthy', updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (request.server_id,),
+            )
+            message = f"Task successful. Server {request.server_id} has been fixed."
         return ServerActionResult(
             request.request_id,
             True,
             "SERVER_ACTION_APPROVED",
-            f"Approved. Server {request.server_id} has been {action_word}.",
+            message,
             request.server_id,
-            desired_status,
+            "running" if request.action == "restart" else server["status"],
         )
 
     @staticmethod

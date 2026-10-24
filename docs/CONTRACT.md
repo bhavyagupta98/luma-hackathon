@@ -1,5 +1,13 @@
 # Luma Voice Ops — Shared Contract
 
+> **Current pilot override (2026-10-24):** Authentication is a separate browser
+> WavLM-embedding step that creates a signed 60-second session. The only worker
+> tasks are `server.restart` and `server.fix`. Commands carry that session;
+> backend-derived roles, permissions, tasks, organization, device, and server
+> assignments are authoritative. Older start/stop, per-command voice, Claude
+> routing, dashboard, runbook, alert, and messaging sections below are retained
+> only as historical design notes and are not part of the acceptance scope.
+
 Every component builds against this file. If you need to change it, tell the
 whole team first, then edit it in a single small commit.
 

@@ -15,7 +15,7 @@ def main() -> None:
     parser.add_argument("--device", default="DC-D-100")
     parser.add_argument("--audio", required=True, type=Path)
     parser.add_argument("--server", default="SRV-100")
-    parser.add_argument("--action", required=True, choices=("start", "stop"))
+    parser.add_argument("--action", required=True, choices=("restart", "fix"))
     args = parser.parse_args()
 
     runtime = build_runtime()

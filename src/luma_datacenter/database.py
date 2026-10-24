@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS servers (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('running', 'stopped')),
+    health TEXT NOT NULL DEFAULT 'healthy' CHECK (health IN ('healthy', 'needs_repair')),
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -157,10 +158,10 @@ INSERT OR IGNORE INTO device_contexts (device_id, organization_id) VALUES
     ('DC-D-200', 'ORG-DEMO'),
     ('DC-D-INACTIVE', 'ORG-DEMO');
 
-INSERT OR IGNORE INTO servers (id, name, status) VALUES
-    ('SRV-100', 'Compute Server One Hundred', 'stopped'),
-    ('SRV-200', 'Compute Server Two Hundred', 'running'),
-    ('SRV-300', 'Restricted Server Three Hundred', 'running');
+INSERT OR IGNORE INTO servers (id, name, status, health) VALUES
+    ('SRV-100', 'Compute Server One Hundred', 'running', 'healthy'),
+    ('SRV-200', 'Compute Server Two Hundred', 'running', 'needs_repair'),
+    ('SRV-300', 'Restricted Server Three Hundred', 'running', 'healthy');
 
 INSERT OR IGNORE INTO server_organizations (server_id, organization_id) VALUES
     ('SRV-100', 'ORG-DEMO'),
@@ -208,6 +209,13 @@ class Database:
             )
         if "role" not in columns:
             connection.execute("ALTER TABLE operator_voice_auth_tokens ADD COLUMN role TEXT")
+        server_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(servers)")
+        }
+        if "health" not in server_columns:
+            connection.execute(
+                "ALTER TABLE servers ADD COLUMN health TEXT NOT NULL DEFAULT 'healthy'"
+            )
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:

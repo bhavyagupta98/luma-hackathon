@@ -2,8 +2,8 @@
 
 ## Purpose
 
-Voice-authenticated, screen-independent control of simulated datacenter server
-power for the hackathon's No App track.
+Voice-authenticated control of simulated datacenter maintenance through a
+browser earpiece and MCP backend.
 
 ## Current State
 
@@ -14,9 +14,9 @@ local ECAPA-TDNN model and a seeded, persistent SQLite database.
 ## Goals
 
 - Authenticate an enrolled operator without accepting a claimed operator ID.
-- Issue a short-lived, one-action signature containing `roles`, task-scoped
-  `permissions`, and exactly one authorized task.
-- Start or stop only an assigned simulated server.
+- Issue a signed 60-second session containing backend-derived `roles`,
+  task-scoped `permissions`, and allowed tasks.
+- Restart or fix only an assigned simulated server.
 - Bootstrap the first organization admin locally.
 - Let a voice-authenticated admin add another admin or operator with complete
   identity, device, and server-assignment details.
@@ -30,11 +30,15 @@ local ECAPA-TDNN model and a seeded, persistent SQLite database.
   artifacts.
 - Do not present speaker similarity as production-grade authentication.
 
+## Current Frontend
+
+- `auth.html` captures voice and computes a local WavLM speaker embedding.
+- `ear.html` performs local/browser speech-to-text and text-to-speech.
+- The gateway parses only `restart server X` and `fix server X` and forwards
+  the signed session to MCP. It never makes authorization decisions.
+
 ## Next Phase
 
-- Add live audio capture to the eventual voice host.
-- Add transcription and strict `start|stop + server ID` intent parsing.
-- Add transcription and structured parsing for spoken user-administration
-  commands.
+- Add structured spoken user-administration commands to the gateway.
 - Add challenge-response and replay/synthetic-speech defenses.
 - Protect MCP Streamable HTTP with OAuth and production key management.

@@ -3,11 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 AUTHENTICATION_TASK = "authenticate"
-SERVER_START_TASK = "server.start"
-SERVER_STOP_TASK = "server.stop"
+SERVER_RESTART_TASK = "server.restart"
+SERVER_FIX_TASK = "server.fix"
 USER_ADD_TASK = "user.add"
 
-FUNCTIONAL_TASKS = frozenset({SERVER_START_TASK, SERVER_STOP_TASK, USER_ADD_TASK})
+SERVER_TASKS = frozenset({SERVER_RESTART_TASK, SERVER_FIX_TASK})
+FUNCTIONAL_TASKS = frozenset({*SERVER_TASKS, USER_ADD_TASK})
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,15 +23,16 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
         {
             "organization:admins:create",
             "organization:members:create",
-            "server:control",
+            "server:restart",
+            "server:repair",
         }
     ),
-    "operator": frozenset({"server:control"}),
+    "operator": frozenset({"server:restart", "server:repair"}),
 }
 
 TASK_PERMISSION: dict[str, str] = {
-    SERVER_START_TASK: "server:control",
-    SERVER_STOP_TASK: "server:control",
+    SERVER_RESTART_TASK: "server:restart",
+    SERVER_FIX_TASK: "server:repair",
     USER_ADD_TASK: "organization:members:create",
 }
 
@@ -48,3 +50,17 @@ def authorize_task(role: str, task: str) -> TaskAuthorization | None:
     if task == USER_ADD_TASK and "organization:admins:create" in role_permissions:
         permissions.add("organization:admins:create")
     return TaskAuthorization((role,), tuple(sorted(permissions)), (task,))
+
+
+def authorize_session(role: str) -> TaskAuthorization | None:
+    """Return all grants available during one short authenticated session."""
+    role_permissions = ROLE_PERMISSIONS.get(role)
+    if role_permissions is None:
+        return None
+    tasks = set(SERVER_TASKS)
+    if role == "org_admin":
+        tasks.add(USER_ADD_TASK)
+    permissions = {TASK_PERMISSION[task] for task in tasks}
+    if role == "org_admin":
+        permissions.add("organization:admins:create")
+    return TaskAuthorization((role,), tuple(sorted(permissions)), tuple(sorted(tasks)))

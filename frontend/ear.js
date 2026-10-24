@@ -20,6 +20,12 @@ const english = lang.startsWith("en");
 const useModelStt = params.get("stt") !== "browser" && english; // Whisper .en models are English-only
 const useModelTts = params.get("tts") !== "browser";
 const sttModel = STT_MODELS[params.get("stt_model")] ?? STT_MODELS.base;
+let voiceSession = null;
+try {
+  voiceSession = JSON.parse(sessionStorage.getItem("luma.voiceSession"));
+} catch {
+  voiceSession = null;
+}
 
 const dot = document.getElementById("dot");
 const nameLabel = document.getElementById("name");
@@ -138,12 +144,28 @@ function handleServerMessage(message) {
     nameLabel.textContent = message.operator?.name ?? deviceId;
   } else if (message.type === "say") {
     speak(message);
+    if (message.reauthenticate) {
+      sessionStorage.removeItem("luma.voiceSession");
+      setTimeout(() => {
+        location.href = `auth.html?device=${encodeURIComponent(deviceId)}`;
+      }, 2500);
+    }
   }
 }
 
 function send(message) {
   if (mock) return mockReply(message);
   if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+}
+
+function activeAuthenticationToken() {
+  const expiresAt = Number(voiceSession?.expires_at || 0);
+  if (!voiceSession?.authentication_token || Date.now() >= expiresAt * 1000) {
+    voiceSession = null;
+    sessionStorage.removeItem("luma.voiceSession");
+    return null;
+  }
+  return voiceSession.authentication_token;
 }
 
 function mockReply(message) {
@@ -203,7 +225,15 @@ async function stopTalking() {
     speak({ text: "I'm not connected right now. Please try again in a moment.", priority: "task", lang });
     return;
   }
-  send({ type: "utterance", text, lang });
+  const authenticationToken = activeAuthenticationToken();
+  if (!mock && !authenticationToken) {
+    speak({ text: "Your session expired. Please authenticate your voice again.", priority: "task", lang });
+    setTimeout(() => {
+      location.href = `auth.html?device=${encodeURIComponent(deviceId)}`;
+    }, 2500);
+    return;
+  }
+  send({ type: "utterance", text, lang, authentication_token: authenticationToken });
 }
 
 window.addEventListener("keydown", (event) => {
@@ -224,6 +254,13 @@ window.addEventListener("pointercancel", stopTalking);
 overlay.addEventListener("click", () => {
   overlay.hidden = true;
   audioContext = new AudioContext();
+  if (!mock && !activeAuthenticationToken()) {
+    speak({ text: "Please authenticate your voice first.", priority: "task", lang });
+    setTimeout(() => {
+      location.href = `auth.html?device=${encodeURIComponent(deviceId)}`;
+    }, 1800);
+    return;
+  }
   if (!TextToSpeech.isSupported() || (!SpeechToText.isSupported() && !useModelStt)) {
     nameLabel.textContent = "This browser has no speech support. Use Chrome.";
     return;

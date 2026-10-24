@@ -47,7 +47,7 @@ def test_enrollment_and_matching_voice_issue_a_verifiable_token(tmp_path) -> Non
     service = build_service(tmp_path)
     enrollment = service.enroll("OP-100", [b"enrollment-one", b"enrollment-two"])
 
-    result = service.authenticate("DC-D-100", b"matching-voice", "server.start")
+    result = service.authenticate("DC-D-100", b"matching-voice", "server.restart")
 
     assert enrollment.enrolled is True
     assert result.authenticated is True
@@ -57,8 +57,8 @@ def test_enrollment_and_matching_voice_issue_a_verifiable_token(tmp_path) -> Non
     claims = service.verify_token(result.authorization_signature)
     assert claims["sub"] == "OP-100"
     assert claims["device_id"] == "DC-D-100"
-    assert claims["permissions"] == ["server:control"]
-    assert claims["tasks"] == ["server.start"]
+    assert claims["permissions"] == ["server:restart"]
+    assert claims["tasks"] == ["server.restart"]
     assert claims["organization_id"] == "ORG-DEMO"
     assert claims["roles"] == ["org_admin"]
     assert len(service.list_events()) == 1
@@ -68,7 +68,7 @@ def test_different_voice_is_refused_and_audited(tmp_path) -> None:
     service = build_service(tmp_path)
     service.enroll("OP-100", [b"enrollment-one"])
 
-    result = service.authenticate("DC-D-100", b"different-voice", "server.start")
+    result = service.authenticate("DC-D-100", b"different-voice", "server.restart")
 
     assert result.authenticated is False
     assert result.code == "VOICE_NOT_MATCHED"
@@ -80,7 +80,7 @@ def test_different_voice_is_refused_and_audited(tmp_path) -> None:
 def test_device_without_enrollment_is_refused_and_audited(tmp_path) -> None:
     service = build_service(tmp_path)
 
-    result = service.authenticate("DC-D-100", b"matching-voice", "server.start")
+    result = service.authenticate("DC-D-100", b"matching-voice", "server.restart")
 
     assert result.authenticated is False
     assert result.code == "VOICE_NOT_ENROLLED"
@@ -90,7 +90,7 @@ def test_device_without_enrollment_is_refused_and_audited(tmp_path) -> None:
 def test_untrusted_device_is_refused_before_voice_processing(tmp_path) -> None:
     service = build_service(tmp_path)
 
-    result = service.authenticate("DC-D-INACTIVE", b"matching-voice", "server.start")
+    result = service.authenticate("DC-D-INACTIVE", b"matching-voice", "server.restart")
 
     assert result.authenticated is False
     assert result.code == "DEVICE_NOT_AUTHORIZED"
@@ -100,7 +100,7 @@ def test_invalid_audio_is_refused_and_audited(tmp_path) -> None:
     service = build_service(tmp_path)
     service.enroll("OP-100", [b"enrollment-one"])
 
-    result = service.authenticate("DC-D-100", b"not-a-known-clip", "server.start")
+    result = service.authenticate("DC-D-100", b"not-a-known-clip", "server.restart")
 
     assert result.code == "INVALID_AUDIO"
     assert result.spoken_message
@@ -110,7 +110,7 @@ def test_invalid_audio_is_refused_and_audited(tmp_path) -> None:
 def test_token_tampering_is_rejected(tmp_path) -> None:
     service = build_service(tmp_path)
     service.enroll("OP-100", [b"enrollment-one"])
-    result = service.authenticate("DC-D-100", b"matching-voice", "server.start")
+    result = service.authenticate("DC-D-100", b"matching-voice", "server.restart")
     assert result.authorization_signature
     token = result.authorization_signature
     tampered = token[:-1] + ("a" if token[-1] != "a" else "b")
@@ -146,7 +146,7 @@ async def test_backend_mcp_authenticates_voice_and_verifies_signature(tmp_path) 
                 "task": "authenticate",
                 "device_id": "DC-D-100",
                 "voice_audio_base64": base64.b64encode(b"matching-voice").decode("ascii"),
-                "requested_task": "server.start",
+                "requested_task": "server.restart",
             },
         )
         authenticated = dict(response.structured_content or {})
@@ -157,7 +157,7 @@ async def test_backend_mcp_authenticates_voice_and_verifies_signature(tmp_path) 
         action_response = await client.call_tool(
             "execute_task",
             {
-                "task": "server.start",
+                "task": "server.restart",
                 "authorization_signature": authenticated["authorization"]["signature"],
                 "request_id": "mcp-start",
                 "server_id": "SRV-100",
@@ -168,8 +168,8 @@ async def test_backend_mcp_authenticates_voice_and_verifies_signature(tmp_path) 
     action = dict(action_response.structured_content or {})
     assert authenticated["code"] == "VOICE_AUTHENTICATED"
     assert authenticated["authorization"]["roles"] == ["org_admin"]
-    assert authenticated["authorization"]["permissions"] == ["server:control"]
-    assert authenticated["authorization"]["tasks"] == ["server.start"]
+    assert authenticated["authorization"]["permissions"] == ["server:restart"]
+    assert authenticated["authorization"]["tasks"] == ["server.restart"]
     assert verified["authorized"] is True
     assert verified["operator_id"] == "OP-100"
     assert action["authorized"] is True
@@ -193,7 +193,7 @@ async def test_backend_mcp_rejects_invalid_base64_with_spoken_result(tmp_path) -
             "execute_task",
             {
                 "task": "authenticate",
-                "requested_task": "server.start",
+                "requested_task": "server.restart",
                 "device_id": "DC-D-100",
                 "voice_audio_base64": "%%%",
             },
@@ -224,14 +224,14 @@ async def test_mcp_signature_is_bound_to_the_requested_task_and_audited(tmp_path
                 "task": "authenticate",
                 "device_id": "DC-D-100",
                 "voice_audio_base64": base64.b64encode(b"matching-voice").decode("ascii"),
-                "requested_task": "server.start",
+                "requested_task": "server.restart",
             },
         )
         authentication = dict(auth_response.structured_content or {})
         refusal_response = await client.call_tool(
             "execute_task",
             {
-                "task": "server.stop",
+                "task": "server.fix",
                 "request_id": "wrong-signed-task",
                 "authorization_signature": authentication["authorization"]["signature"],
                 "server_id": "SRV-200",

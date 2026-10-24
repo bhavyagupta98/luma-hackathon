@@ -19,7 +19,7 @@ class FakeVoiceEmbedder:
         raise VoiceEmbeddingError("Audio could not be processed")
 
 
-def build_authenticated_services(tmp_path, task: str = "server.start"):
+def build_authenticated_services(tmp_path, task: str = "server.restart"):
     database = Database(tmp_path / "datacenter.db")
     signer = VoiceTokenSigner(
         tmp_path / "key.pem", issuer="test", audience="datacenter", ttl_seconds=60
@@ -49,11 +49,11 @@ def request(claims, *, request_id: str, server_id: str, action: str) -> ServerAc
     )
 
 
-def test_authenticated_operator_can_start_assigned_server(tmp_path) -> None:
+def test_authenticated_operator_can_restart_assigned_server(tmp_path) -> None:
     database, service, claims = build_authenticated_services(tmp_path)
 
     result = service.execute(
-        request(claims, request_id="start-1", server_id="SRV-100", action="start")
+        request(claims, request_id="restart-1", server_id="SRV-100", action="restart")
     )
 
     assert result.authorized is True
@@ -66,10 +66,12 @@ def test_authenticated_operator_can_start_assigned_server(tmp_path) -> None:
 
 def test_voice_token_is_single_use(tmp_path) -> None:
     _, service, claims = build_authenticated_services(tmp_path)
-    service.execute(request(claims, request_id="first", server_id="SRV-100", action="start"))
+    service.execute(
+        request(claims, request_id="first", server_id="SRV-100", action="restart")
+    )
 
     replay = service.execute(
-        request(claims, request_id="second", server_id="SRV-200", action="stop")
+        request(claims, request_id="second", server_id="SRV-200", action="fix")
     )
 
     assert replay.authorized is False
@@ -78,7 +80,7 @@ def test_voice_token_is_single_use(tmp_path) -> None:
 
 def test_same_request_is_idempotent_even_after_token_consumption(tmp_path) -> None:
     _, service, claims = build_authenticated_services(tmp_path)
-    action = request(claims, request_id="same", server_id="SRV-100", action="start")
+    action = request(claims, request_id="same", server_id="SRV-100", action="restart")
 
     first = service.execute(action)
     second = service.execute(action)
@@ -88,10 +90,10 @@ def test_same_request_is_idempotent_even_after_token_consumption(tmp_path) -> No
 
 
 def test_operator_cannot_control_unassigned_server(tmp_path) -> None:
-    _, service, claims = build_authenticated_services(tmp_path, "server.stop")
+    _, service, claims = build_authenticated_services(tmp_path, "server.fix")
 
     result = service.execute(
-        request(claims, request_id="restricted", server_id="SRV-300", action="stop")
+        request(claims, request_id="restricted", server_id="SRV-300", action="fix")
     )
 
     assert result.authorized is False
@@ -100,10 +102,10 @@ def test_operator_cannot_control_unassigned_server(tmp_path) -> None:
 
 
 def test_signature_cannot_execute_a_different_task(tmp_path) -> None:
-    _, service, claims = build_authenticated_services(tmp_path, "server.start")
+    _, service, claims = build_authenticated_services(tmp_path, "server.restart")
 
     result = service.execute(
-        request(claims, request_id="wrong-task", server_id="SRV-200", action="stop")
+        request(claims, request_id="wrong-task", server_id="SRV-200", action="fix")
     )
 
     assert result.authorized is False

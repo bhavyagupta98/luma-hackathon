@@ -75,7 +75,7 @@ def test_admin_can_add_operator_with_device_and_server_assignment(tmp_path) -> N
     assert membership["role"] == "operator"
 
     enrollment = voice.enroll("OP-NEW", [b"new-user-voice"])
-    authenticated = voice.authenticate("DC-D-NEW", b"new-user-voice", "server.start")
+    authenticated = voice.authenticate("DC-D-NEW", b"new-user-voice", "server.restart")
     assert enrollment.enrolled is True
     assert authenticated.authenticated is True
     assert authenticated.roles == ("operator",)

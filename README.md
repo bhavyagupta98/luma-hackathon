@@ -1,7 +1,8 @@
 # Luma Datacenter Voice Control
 
-A screen-independent hackathon pilot that authenticates a datacenter operator's
-voice and starts or stops a simulated server through an MCP backend.
+A voice-first hackathon pilot that authenticates a datacenter worker, creates a
+60-second signed session, and restarts or fixes assigned simulated servers
+through an MCP backend.
 
 The application never controls real infrastructure. Server state, assignments,
 voice profiles, tokens, and audit events live in local SQLite.
@@ -25,7 +26,42 @@ local ECAPA-TDNN model is stored under
 python scripts/download_voice_model.py
 ```
 
-## Run a Local Voice Pilot
+## Run the End-to-End Local Pilot
+
+Run the backend and gateway in separate terminals:
+
+```bash
+source .venv/bin/activate
+luma-backend-mcp --transport streamable-http --port 8000
+```
+
+```bash
+source .venv/bin/activate
+luma-gateway
+```
+
+Open `http://127.0.0.1:8080/auth.html?device=DC-D-100`. After voice
+authentication, say either “restart server one hundred” or “fix server two
+hundred.” The browser performs STT/TTS; the gateway calls MCP; the backend owns
+identity, authorization, SQLite mutation, audit, and every spoken result.
+
+The session expires after 60 seconds. The browser clears it and redirects to
+voice sign-in; the backend also rejects an expired signature.
+
+## Enroll a Browser Voice
+
+Open
+`http://127.0.0.1:8080/auth.html?enroll=1&device=DC-D-100&operator=OP-100&name=Avery%20Chen`,
+record three phrases, and import the downloaded profile:
+
+```bash
+luma-enroll-voice --operator OP-100 --profile ~/Downloads/voice-enrollment-OP-100.json
+```
+
+Enrollment and authentication must use the same WavLM browser model. The
+backend stores only the centroid embedding, not the raw recordings.
+
+## Optional ECAPA CLI Pilot
 
 macOS may ask for Terminal microphone access on the first recording. Record
 three different enrollment phrases:
@@ -77,15 +113,14 @@ simulated server action:
 
 ```bash
 luma-record-voice --output samples/op100-pilot.wav --seconds 5
-luma-voice-pilot --audio samples/op100-pilot.wav --action start --server SRV-100
+luma-voice-pilot --audio samples/op100-pilot.wav --action restart --server SRV-100
 ```
 
-To test stopping a server, record another fresh clip because each signed voice
-token is valid for only one action:
+To test fixing a server through the audio CLI:
 
 ```bash
-luma-record-voice --output samples/op100-stop.wav --seconds 5
-luma-voice-pilot --audio samples/op100-stop.wav --action stop --server SRV-200
+luma-record-voice --output samples/op100-fix.wav --seconds 5
+luma-voice-pilot --audio samples/op100-fix.wav --action fix --server SRV-200
 ```
 
 ## Run the MCP Backend
@@ -96,11 +131,11 @@ luma-backend-mcp --transport streamable-http --port 8000
 
 Connect an MCP client to `http://127.0.0.1:8000/mcp`. The operator flow is:
 
-1. Call `execute_task` with `task=authenticate`, `DC-D-100`, a base64 PCM WAV,
-   and one `requested_task` such as `server.start`.
+1. Call `execute_task` with `task=authenticate`, `DC-D-100`, a browser voice
+   embedding, and its embedding model.
 2. Speak its `spoken_message`.
-3. Pass `authorization.signature` to `execute_task` with that exact requested
-   task and its target fields.
+3. Pass `authorization.signature` to `execute_task` with `server.restart` or
+   `server.fix` and a target server.
 4. Speak the action result's `spoken_message`.
 
 Successful authentication returns the signed authorization shape:
@@ -109,13 +144,13 @@ Successful authentication returns the signed authorization shape:
 {
   "signature": "<short-lived Ed25519 JWT>",
   "roles": ["org_admin"],
-  "permissions": ["server:control"],
-  "tasks": ["server.start"]
+  "permissions": ["organization:admins:create", "organization:members:create", "server:repair", "server:restart"],
+  "tasks": ["server.fix", "server.restart", "user.add"]
 }
 ```
 
-The signature is task-bound and single-use. A `server.start` signature cannot
-authorize `server.stop` or `user.add`.
+The signed session expires after 60 seconds. Server assignment is checked for
+every action; client-supplied roles or permissions are never trusted.
 
 Developer tools `describe_pilot`, `list_voice_auth_events`, and
 `list_server_action_events` expose the seeded setup and audit logs.

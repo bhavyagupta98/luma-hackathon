@@ -2,36 +2,33 @@
 
 ## Product Boundary
 
-Luma targets the hackathon's **No App** track. A datacenter operator authenticates
-by voice and requests one capability: simulated server power control. The only
-supported actions are `start` and `stop`. There is no dashboard, visual
-confirmation, or manual approval in the core flow, and no real infrastructure
-integration.
+Luma uses a voice-only browser earpiece. A datacenter worker authenticates once
+and requests simulated server maintenance. The only supported actions are
+`restart` and `fix`; no real infrastructure is controlled.
 
 ## Backend Flow
 
 ```text
-PCM WAV + trusted device ID
+browser WavLM embedding + trusted device ID
    |
    v
-local ECAPA-TDNN speaker verification
+SQLite speaker-profile similarity check
    |
    v
-60-second Ed25519 JWT with organization, roles, permissions, and one task
+60-second Ed25519 JWT with organization, roles, permissions, and allowed tasks
    |
    v
 execute_task(task, authorization_signature, task-specific fields)
    |
    +-- verify signature, issuer, audience, expiry, issuance, and exact task
-   +-- consume token once
    +-- verify operator/server assignment
    +-- update simulated SQLite server state
    `-- audit and return spoken_message
 ```
 
-The backend exposes both stages over MCP. Capture, transcription, and intent
-parsing are intentionally outside this phase. The local pilot CLI supplies an
-already-recorded WAV and an explicit action.
+The backend exposes both stages over MCP. The browser captures audio, computes
+the WavLM embedding, transcribes task speech, and speaks results. The gateway
+extracts one of the two supported intents and passes the session to MCP.
 
 An `org_admin` may authenticate specifically for `user.add`. The signature is
 consumed by a transaction that validates organization scope, creates the
@@ -57,8 +54,8 @@ single SQLite transaction. `request_id` makes action retries idempotent.
 
 ## MCP Tools
 
-- `execute_task` — authenticates voice for one requested task or consumes the
-  resulting signature to perform `server.start`, `server.stop`, or `user.add`.
+- `execute_task` — authenticates voice for a 60-second session or performs
+  `server.restart`, `server.fix`, or `user.add`.
 - `describe_task_contract` — exact fields for every task and the signed
   `roles`, `permissions`, and `tasks` shape.
 - `verify_authorization_signature` — developer diagnostic for issued signatures.

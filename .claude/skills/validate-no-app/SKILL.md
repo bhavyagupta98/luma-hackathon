@@ -14,8 +14,9 @@ Confirm that authentication, approval, and refusal results have non-empty
 are audited; and documentation clearly states that the servers and biometric
 authentication are simulations.
 
-Confirm the authorization signature contains `roles`, task-scoped
-`permissions`, and one `tasks` value, and that cross-task use is refused.
+Confirm the 60-second authorization session contains backend-derived `roles`,
+task-scoped `permissions`, and allowed `tasks`; browser-provided grants must
+never override signed claims.
 
 For user administration, confirm that a signed admin voice authorization is required,
 the structured call supplies every registration field, and the new person—not

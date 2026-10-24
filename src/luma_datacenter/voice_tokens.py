@@ -124,8 +124,8 @@ class VoiceTokenSigner:
                 isinstance(value, str) and value for value in values
             ):
                 raise VoiceTokenError(f"Voice authorization {claim_name} claim is invalid")
-        if len(claims["tasks"]) != 1:
-            raise VoiceTokenError("Voice authorization must contain exactly one task")
+        if len(claims["tasks"]) > 3:
+            raise VoiceTokenError("Voice authorization contains too many tasks")
         return claims
 
     def public_key_pem(self) -> str:

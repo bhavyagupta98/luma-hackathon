@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Luma End-to-End Test Demo</title>
+  <style>
+    body { margin: 0; background: #070b14; color: #eef2ff; font: 18px/1.45 system-ui; }
+    main { width: min(900px, 92vw); margin: 7vh auto; }
+    h1 { font-size: clamp(32px, 6vw, 64px); margin-bottom: 8px; }
+    p { color: #a5b4fc; }
+    button { padding: 16px 28px; border: 0; border-radius: 999px; background: #4f46e5;
+      color: white; font: bold 18px system-ui; cursor: pointer; }
+    button:disabled { opacity: .5; }
+    article { margin-top: 28px; padding: 28px; border: 1px solid #26304a; border-radius: 18px;
+      background: #0f172a; min-height: 220px; }
+    .label { color: #818cf8; font-size: 13px; font-weight: bold; letter-spacing: .1em; }
+    .speech { font-size: clamp(22px, 4vw, 38px); margin: 8px 0 24px; }
+    #result { color: #86efac; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Luma voice authorization</h1>
+    <p>Narrated end-to-end acceptance tests with distinct AB, BG, unknown, and Luma voices.</p>
+    <button id="play">Play full demo</button>
+    <article>
+      <div class="label" id="counter">READY</div>
+      <h2 id="title">Press play to begin</h2>
+      <div class="label">WORKER</div><div class="speech" id="worker">—</div>
+      <div class="label">LUMA</div><div class="speech" id="system">—</div>
+      <div id="result"></div>
+    </article>
+  </main>
+  <script type="module" src="demo.js"></script>
+</body>
+</html>

@@ -10,12 +10,12 @@ from uuid import uuid4
 from mcp.server import MCPServer
 
 from .models import ServerActionRequest, UserRegistrationRequest
-from .policy import AUTHENTICATION_TASK, FUNCTIONAL_TASKS, USER_ADD_TASK
+from .policy import AUTHENTICATION_TASK, FUNCTIONAL_TASKS, SERVER_TASKS, USER_ADD_TASK
 from .runtime import build_runtime
 from .voice_embeddings import VoiceEmbedder
 from .voice_tokens import VoiceTokenError, VoiceTokenSigner
 
-TaskName = Literal["authenticate", "server.start", "server.stop", "user.add"]
+TaskName = Literal["authenticate", "server.restart", "server.fix", "user.add"]
 
 
 def build_backend_server(
@@ -31,20 +31,30 @@ def build_backend_server(
     signer = runtime.signer
     mcp = MCPServer(
         "luma-datacenter-backend",
-        version="0.4.0",
+        version="0.5.0",
         instructions=(
-            "Call execute_task. Authenticate voice for exactly one requested task, then pass "
-            "the returned signature to that task. Always speak spoken_message."
+            "Authenticate a voice once, then use the returned 60-second session for authorized "
+            "tasks. Always speak spoken_message."
         ),
     )
 
-    def authenticate(device_id: str, audio_base64: str, requested_task: str) -> dict[str, Any]:
-        if requested_task not in FUNCTIONAL_TASKS:
+    def authenticate(
+        device_id: str, audio_base64: str, requested_task: str,
+        voice_embedding: list[float] | None, embedding_model: str,
+    ) -> dict[str, Any]:
+        if requested_task and requested_task not in FUNCTIONAL_TASKS:
             result = voice.reject_request(
                 device_id,
                 "TASK_NOT_SUPPORTED",
                 "I don't recognize the task you want to authorize.",
             )
+        elif voice_embedding is not None:
+            if len(voice_embedding) > 1024 or not embedding_model:
+                result = voice.reject_invalid_audio(
+                    device_id, "I couldn't read that voice profile. Please try again."
+                )
+            else:
+                result = voice.authenticate_embedding(device_id, voice_embedding, embedding_model)
         elif len(audio_base64) > 3_000_000:
             result = voice.reject_invalid_audio(
                 device_id, "That audio recording was too large. Please try a shorter recording."
@@ -79,6 +89,10 @@ def build_backend_server(
                 "device_id": result.device_id,
                 "organization_id": result.organization_id if result.authenticated else None,
             },
+            "similarity_score": result.similarity_score,
+            "display_name": (
+                voice._operator_name(result.operator_id) if result.operator_id else None
+            ),
         }
 
     def verified_claims(signature: str) -> dict[str, Any] | None:
@@ -94,6 +108,8 @@ def build_backend_server(
         requested_task: str = "",
         device_id: str = "",
         voice_audio_base64: str = "",
+        voice_embedding: list[float] | None = None,
+        embedding_model: str = "",
         authorization_signature: str = "",
         server_id: str = "",
         organization_id: str = "",
@@ -111,14 +127,16 @@ def build_backend_server(
         """
         resolved_id = request_id or f"generated-{uuid4()}"
         if task == AUTHENTICATION_TASK:
-            return authenticate(device_id, voice_audio_base64, requested_task)
+            return authenticate(
+                device_id, voice_audio_base64, requested_task, voice_embedding, embedding_model
+            )
 
         claims = verified_claims(authorization_signature)
         if claims is None:
             message = (
                 "Your voice verification expired or was invalid. Please verify your voice again."
             )
-            if task in {"server.start", "server.stop"}:
+            if task in SERVER_TASKS:
                 result = actions.reject_unverified(
                     resolved_id, server_id, task.removeprefix("server."), message
                 )
@@ -151,7 +169,7 @@ def build_backend_server(
         permissions = tuple(str(value) for value in claims["permissions"])
         tasks = tuple(str(value) for value in claims["tasks"])
 
-        if task in {"server.start", "server.stop"}:
+        if task in SERVER_TASKS:
             action = task.removeprefix("server.")
             result = actions.execute(
                 ServerActionRequest(
@@ -258,14 +276,14 @@ def build_backend_server(
         """Describe task inputs and signed role/permission/task authorization."""
         return {
             "flow": [
-                "Authenticate for exactly one requested_task.",
+                "Authenticate once to create a 60-second role and permission session.",
                 "Speak spoken_message and stop on refusal.",
-                "Use authorization.signature once for that same functional task.",
+                "Use authorization.signature for allowed tasks until its 60-second expiry.",
             ],
             "tasks": {
-                "authenticate": ["device_id", "voice_audio_base64", "requested_task"],
-                "server.start": ["authorization_signature", "request_id", "server_id"],
-                "server.stop": ["authorization_signature", "request_id", "server_id"],
+                "authenticate": ["device_id", "voice_embedding", "embedding_model"],
+                "server.restart": ["authorization_signature", "request_id", "server_id"],
+                "server.fix": ["authorization_signature", "request_id", "server_id"],
                 "user.add": [
                     "authorization_signature",
                     "request_id",
@@ -289,8 +307,8 @@ def build_backend_server(
             "device_id": "DC-D-100",
             "organization_id": "ORG-DEMO",
             "role": "org_admin",
-            "start_target": {"server_id": "SRV-100", "initial_status": "stopped"},
-            "stop_target": {"server_id": "SRV-200", "initial_status": "running"},
+            "restart_target": {"server_id": "SRV-100", "initial_status": "running"},
+            "fix_target": {"server_id": "SRV-200", "initial_health": "needs_repair"},
             "tasks": sorted(FUNCTIONAL_TASKS),
             "model": voice.embedder.model_name,
             "token_algorithm": "EdDSA",

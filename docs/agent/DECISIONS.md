@@ -1,5 +1,26 @@
 # Decision Log
 
+## 2026-10-24 — Use a 60-second authenticated session for two maintenance tasks
+
+- **Status:** Accepted; supersedes the one-task signature decision below.
+- **Context:** The worker authenticates first, then may say either “restart
+  server X” or “fix server X” without authenticating again for one minute.
+- **Decision:** Browser WavLM embeddings are verified against a matching
+  SQLite profile. The backend issues an Ed25519 session carrying roles,
+  permissions, allowed tasks, organization, device, identity, and expiry.
+  Restart and fix calls derive authority exclusively from those signed claims.
+- **Consequences:** One session can perform multiple assigned-server tasks for
+  60 seconds. The frontend clears its copy at expiry and the backend rejects it
+  cryptographically even if a client fails to clear local state.
+
+## 2026-10-24 — Keep language and authorization responsibilities separate
+
+- **Status:** Accepted.
+- **Decision:** The browser owns STT/TTS, the gateway performs deterministic
+  parsing for the two pilot commands, and the MCP backend owns identity,
+  authorization, simulated mutation, and audit. Backend `spoken_message`
+  values pass through unchanged.
+
 ## 2026-10-24 — Bind voice authorization to one explicit task
 
 - **Status:** Accepted
