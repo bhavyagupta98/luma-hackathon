@@ -105,6 +105,63 @@ Connect an MCP client to `http://127.0.0.1:8000/mcp`. The operator flow is:
 Developer tools `describe_pilot`, `list_voice_auth_events`, and
 `list_server_action_events` expose the seeded setup and audit logs.
 
+## Run the Voice Gateway Demo
+
+The gateway (`luma-gateway`) puts a browser earpiece in front of the backend: a worker
+signs in by voice, hears "<name> is authenticated.", then says
+`restart server X` or `fix server X`. The gateway checks the worker's server assignments and
+answers "Task successful." or "You are not allowed to do this task." Each session is cleared
+60 seconds after sign-in. Protocol details are in [`docs/CONTRACT.md`](docs/CONTRACT.md).
+
+```bash
+python -m pip install -e '.[dev,gateway]'
+python scripts/make_demo_voices.py       # Windows: writes 15 local voice files to samples/
+python scripts/demo_setup.py --onboard   # enroll Avery + Jordan; add Alice by voice and enroll her
+luma-gateway                             # http://localhost:8080 (stop it before re-running setup)
+```
+
+| Worker | Device | Role | Servers | Voice files |
+| --- | --- | --- | --- | --- |
+| Avery Chen | `DC-D-100` | `org_admin` | `SRV-100`, `SRV-200` | `samples/avery/` |
+| Jordan Patel | `DC-D-200` | `operator` | `SRV-300` | `samples/jordan/` |
+| Alice Smith (onboarded) | `DC-D-ALICE` | `operator` | `SRV-100` | `samples/alice/` |
+
+Without a microphone, play a voice file through the running gateway:
+
+```bash
+python scripts/simulate_worker.py --device DC-D-100 --audio samples/avery/auth-1.wav   "restart server one hundred" "restart server three hundred"
+python scripts/simulate_worker.py --device DC-D-200 --audio samples/jordan/auth-1.wav   "restart server one hundred" --wait 60     # refused, then watch the session expire
+```
+
+**One-command hands-free demo:** `python scripts/run_demo.py --fresh` starts the gateway, opens Chrome
+in a clean window and taps the page for you, so the presenter registers, signs in and gives commands
+purely by voice ([run sheet](docs/DEMO.md)).
+
+**Overheat scenario (port 8090, audio only):** `python scripts/run_demo.py --scenario --fresh` runs a
+second server where, shortly after a worker is inside, the earpiece alerts them to an overheating server,
+offers directions from where they checked in, and walks them to the rack with short spoken steps
+(repeat, back, "where am I", fix). Dialogue and a 2-minute video script: [docs/SCENARIO.md](docs/SCENARIO.md).
+
+The pages are hands-free: after one tap to start (browsers require it), the page speaks a prompt,
+plays a soft tone, listens until you stop talking, answers, and listens again; nothing to press.
+Add `&manual=1` to any link to hold Space (or the button) to talk instead.
+
+With a microphone you can enroll in the browser (demo only): start the gateway with
+`LUMA_ALLOW_BROWSER_ENROLL=1 luma-gateway` and open
+`http://localhost:8080/auth.html?device=DC-D-100&enroll=1`; it asks you to say your name ("My name
+is ..."), records three phrases, saves your voice profile and name, says "<name>, you are
+enrolled.", and continues to sign-in, where you are greeted by that name. It only accepts requests from the same computer.
+Or enroll with the command-line recorder above, then open
+`http://localhost:8080/auth.html?device=DC-D-100` in Chrome, tap once, and speak after the tone.
+All pages use Chrome's built-in speech by default (fast and reliable). Add `&stt=model&tts=model`
+to the earpiece link to use the on-device models instead (Whisper and MMS-TTS, about 115 MB,
+downloaded on first use; slower, and they share the page's main thread). The microphone only works
+on `localhost` or HTTPS.
+
+Tests: `pytest -q` runs the whole suite. `tests/test_gateway_flow.py` uses a fake speaker model;
+`tests/test_gateway_real_voice.py` uses the generated Windows voices with the real ECAPA model
+and is skipped when torch or Windows speech is unavailable.
+
 ## Add Users and Roles
 
 Supported organization roles:

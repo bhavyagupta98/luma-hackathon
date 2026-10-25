@@ -1,0 +1,7 @@
+{
+  "name": "luma-browser-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Drives the real browser earpiece with a fake microphone playing voice files",
+  "dependencies": { "puppeteer-core": "^24.0.0" }
+}

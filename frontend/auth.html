@@ -4,16 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Luma Voice Sign-in</title>
+  <link rel="icon" href="data:,">
   <style>
     :root {
-      --bg: #000;
-      --fg: #8a8a8a;
-      --dim: #333;
-      --idle: #555;
-      --busy: #eab308;
-      --listening: #3b82f6;
+      --bg: #0b0f14;
+      --panel: #131a22;
+      --line: #263140;
+      --fg: #f1f5f9;
+      --muted: #9aa4b2;
+      --idle: #475569;
+      --busy: #f59e0b;
+      --ready: #3b82f6;
+      --recording: #ef4444;
       --ok: #22c55e;
-      --fail: #ef4444;
+      --fail: #f43f5e;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -21,73 +25,196 @@
       height: 100%;
       background: var(--bg);
       color: var(--fg);
-      font: 16px/1.4 system-ui, sans-serif;
+      font: 18px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
       touch-action: none;
     }
     main {
-      height: 100%;
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 16px 28px;
+    }
+    .brand {
+      width: 100%;
+      max-width: 720px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+    .brand .logo { color: var(--fg); font-weight: 700; font-size: 20px; letter-spacing: 0.02em; }
+    .brand .mode {
+      padding: 6px 14px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--fg);
+    }
+    .stage {
+      flex: 1;
+      width: 100%;
+      max-width: 720px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 12px;
-      padding: 16px;
+      gap: 28px;
       text-align: center;
     }
-    #dot {
-      width: 14px;
-      height: 14px;
+
+    /* The big push-to-talk button; its look follows the data-state set by the page script. */
+    .talk {
+      --c: var(--idle);
+      position: relative;
+      width: min(64vw, 300px);
+      aspect-ratio: 1;
       border-radius: 50%;
-      background: var(--idle);
-      transition: background 0.15s;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 6px;
+      background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--c) 78%, white) 0%, var(--c) 70%);
+      box-shadow: 0 0 0 10px color-mix(in srgb, var(--c) 22%, transparent), 0 20px 50px rgba(0, 0, 0, 0.5);
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
     }
-    #dot[data-state="loading"], #dot[data-state="processing"] { background: var(--busy); }
-    #dot[data-state="recording"] { background: var(--listening); }
-    #dot[data-state="verified"] { background: var(--ok); }
-    #dot[data-state="refused"] { background: var(--fail); }
-    #status { max-width: 32ch; }
-    #hint { color: var(--dim); font-size: 13px; }
+    .talk:active { transform: scale(0.97); }
+    .talk svg { width: 38%; height: 38%; fill: currentColor; }
+    .talk::after {
+      content: "Starting";
+      font-size: clamp(20px, 5vw, 26px);
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    .talk[data-state="idle"]::after       { content: "Ready"; }
+    .talk[data-state="loading"]    { --c: var(--busy); }
+    .talk[data-state="loading"]::after    { content: "Loading"; }
+    .talk[data-state="ready"]      { --c: var(--ready); }
+    .talk[data-state="ready"]::after      { content: "Get ready"; }
+    .manual .talk[data-state="ready"]::after { content: "Hold to speak"; }
+    .talk[data-state="recording"]  { --c: var(--recording); animation: pulse 1.1s ease-in-out infinite; }
+    .talk[data-state="recording"]::after  { content: "Listening…"; }
+    .talk[data-state="processing"] { --c: var(--busy); animation: breathe 1.4s ease-in-out infinite; }
+    .talk[data-state="processing"]::after { content: "Checking…"; }
+    .talk[data-state="verified"]   { --c: var(--ok); }
+    .talk[data-state="verified"]::after   { content: "Verified"; }
+    .talk[data-state="refused"]    { --c: var(--fail); }
+    .talk[data-state="refused"]::after    { content: "Try again"; }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--c) 30%, transparent), 0 20px 50px rgba(0, 0, 0, 0.5); }
+      50%      { box-shadow: 0 0 0 34px color-mix(in srgb, var(--c) 6%, transparent), 0 20px 50px rgba(0, 0, 0, 0.5); }
+    }
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); }
+      50%      { transform: scale(1.03); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .talk[data-state="recording"], .talk[data-state="processing"] { animation: none; }
+    }
+
+    #status {
+      max-width: 22ch;
+      font-size: clamp(26px, 6vw, 40px);
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    #hint { color: var(--muted); font-size: clamp(16px, 3.6vw, 20px); }
+    kbd {
+      display: inline-block;
+      padding: 1px 10px;
+      border: 1px solid var(--line);
+      border-bottom-width: 3px;
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--fg);
+      font: inherit;
+      font-size: 0.9em;
+    }
+
     #overlay {
       position: fixed;
       inset: 0;
+      z-index: 10;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 16px;
+      gap: 28px;
+      padding: 24px;
       background: var(--bg);
-      color: var(--fg);
-      font-size: 20px;
       text-align: center;
       cursor: pointer;
     }
     #overlay[hidden] { display: none; }
+    #overlay .start {
+      padding: 22px 44px;
+      border-radius: 999px;
+      background: var(--ready);
+      color: #fff;
+      font-size: clamp(22px, 5vw, 30px);
+      font-weight: 700;
+      box-shadow: 0 14px 40px rgba(59, 130, 246, 0.4);
+    }
+    #overlay .note { color: var(--muted); max-width: 34ch; }
+    #overlay .logo { font-size: 28px; font-weight: 700; }
+
     #log {
-      position: fixed;
-      left: 16px;
-      right: 16px;
-      bottom: 16px;
-      max-height: 40%;
+      width: 100%;
+      max-width: 720px;
+      max-height: 32vh;
       overflow: auto;
-      margin: 0;
-      padding: 8px;
-      border: 1px solid var(--dim);
-      font: 12px/1.4 ui-monospace, monospace;
+      margin: 20px 0 0;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+      color: var(--muted);
+      font: 13px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
       white-space: pre-wrap;
       text-align: left;
+      user-select: text;
+      touch-action: auto;
     }
     #log[hidden] { display: none; }
-    #log a { color: var(--fg); }
+    #log a { color: var(--ready); }
   </style>
 </head>
 <body>
   <main>
-    <div id="dot" data-state="idle" aria-hidden="true"></div>
-    <div id="status" role="status" aria-live="polite">Voice sign-in</div>
-    <div id="hint">Hold Space or touch and hold to speak</div>
+    <div class="brand">
+      <span class="logo">Luma</span>
+      <span class="mode" id="mode">Voice sign-in</span>
+    </div>
+    <section class="stage">
+      <div id="dot" class="talk" data-state="idle" role="img" aria-label="Push to talk">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 15a4 4 0 0 0 4-4V6a4 4 0 0 0-8 0v5a4 4 0 0 0 4 4Zm6-4a1 1 0 1 1 2 0 8 8 0 0 1-7 7.94V21h3a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h3v-2.06A8 8 0 0 1 4 11a1 1 0 1 1 2 0 6 6 0 0 0 12 0Z"/>
+        </svg>
+      </div>
+      <div id="status" role="status" aria-live="polite">Voice sign-in</div>
+      <div id="hint">Just speak after the tone. Nothing to press.</div>
+    </section>
+    <div id="log" hidden></div>
   </main>
-  <div id="overlay" role="button" tabindex="0">Tap to start voice sign-in</div>
-  <div id="log" hidden></div>
+  <div id="overlay" role="button" tabindex="0">
+    <div class="logo">Luma</div>
+    <div class="start">Tap to start</div>
+    <div class="note">Tap once to start. After that it is hands-free. If the browser asks to use the microphone, choose Allow.</div>
+  </div>
+  <script>
+    // Display only: show which mode and device this page is for.
+    const query = new URLSearchParams(location.search);
+    document.getElementById("mode").textContent =
+      (query.has("enroll") ? "Voice enrollment" : "Voice sign-in") + " · " + (query.get("device") || "DC-D-100");
+  </script>
   <script type="module" src="auth.js"></script>
 </body>
 </html>

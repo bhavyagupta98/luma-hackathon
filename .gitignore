@@ -14,3 +14,4 @@ build/
 models/**/.cache/
 models/**/.runtime/
 .env
+.demo-chrome-profile*/

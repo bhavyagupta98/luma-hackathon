@@ -121,6 +121,7 @@ export function speakable(text) {
     .replace(/\b([A-Z]{1,4})(?=-[A-Z0-9])/g, (letters) => [...letters].join(" ")) // SRV-100 -> S R V-100
     .replace(/\d+/g, (digits) => ` ${digitsToWords(digits)} `)
     .replace(/-/g, " ")
+    .replace(/\s+([.,!?;:])/g, "$1")
     .replace(/\s+/g, " ")
     .trim();
 }

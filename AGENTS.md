@@ -45,6 +45,12 @@ testing, and No App validation invariants.
 - `.claude/skills/` — project-specific implementation and validation skills.
 - `src/luma_datacenter/` — voice identity, signed authorization, simulated
   server policy, SQLite storage, local pilot commands, and the MCP backend.
+- `src/luma_datacenter/gateway/` — voice gateway: WebSocket sign-in and commands, 60-second
+  sessions, `restart`/`fix server X` parsing and permission checks.
+- `frontend/` — browser earpiece (sign-in, push-to-talk, on-device speech models); serve with
+  `luma-gateway` or `python frontend/serve.py`.
+- `scripts/make_demo_voices.py`, `demo_setup.py`, `simulate_worker.py` — local voice files,
+  demo enrollment/onboarding, and a no-microphone worker simulator.
 - `models/` — pinned local speaker-verification model and provenance.
 - `scripts/` — deterministic model download and integrity verification.
 - `tests/` — domain, voice-model, signed-token, and MCP acceptance tests.

@@ -7,6 +7,17 @@ const FRAME_SECONDS = 0.02;
 const SPEECH_RMS = 0.015; // about -36 dBFS; quieter frames count as silence
 const EDGE_PADDING_SECONDS = 0.15;
 
+// Hands-free listening (listen()): speech starts when the level stays above SPEECH_START_RMS for
+// a few frames, and ends after END_SILENCE_MS below SPEECH_KEEP_RMS.
+const POLL_MS = 50;
+const SPEECH_START_RMS = 0.02;
+const SPEECH_KEEP_RMS = 0.012;
+const SPEECH_START_FRAMES = 3;
+const END_SILENCE_MS = 1000;
+const START_TIMEOUT_MS = 9000;
+// If the page may not process audio (a suspended AudioContext reads silence), record this long.
+const BLIND_WINDOW_MS = 6000;
+
 export class VoiceRecorder {
   constructor({ minSeconds = 1.5, maxSeconds = 14 } = {}) {
     this.minSeconds = minSeconds;
@@ -32,6 +43,52 @@ export class VoiceRecorder {
         autoGainControl: true,
       },
     });
+  }
+
+  // Hands-free: records until the person has spoken and then gone quiet, and resolves with the
+  // same result as stop(). Resolves {error: "silence"} if nobody speaks within the start timeout.
+  // Call it after the system has finished speaking, so its own voice is not picked up.
+  async listen({ startTimeoutMs = START_TIMEOUT_MS, endSilenceMs = END_SILENCE_MS } = {}) {
+    if (!this._stream) throw new Error("Call open() before listen().");
+    if (!this._analyser) {
+      this._context = new AudioContext();
+      this._analyser = this._context.createAnalyser();
+      this._analyser.fftSize = 1024;
+      this._context.createMediaStreamSource(this._stream).connect(this._analyser);
+    }
+    await this._context.resume().catch(() => {});
+    const blind = this._context.state !== "running";
+
+    this.start();
+    const samples = new Float32Array(this._analyser.fftSize);
+    const began = performance.now();
+    let loudFrames = 0;
+    let speaking = false;
+    let lastVoice = began;
+    await new Promise((resolve) => {
+      const timer = setInterval(() => {
+        const now = performance.now();
+        this._analyser.getFloatTimeDomainData(samples);
+        const level = rms(samples, 0, samples.length);
+        if (level >= SPEECH_START_RMS) {
+          loudFrames += 1;
+          if (loudFrames >= SPEECH_START_FRAMES) speaking = true;
+        } else {
+          loudFrames = 0;
+        }
+        if (speaking && level >= SPEECH_KEEP_RMS) lastVoice = now;
+        const finished = blind
+          ? now - began >= BLIND_WINDOW_MS
+          : (speaking && now - lastVoice >= endSilenceMs) ||
+            (!speaking && now - began >= startTimeoutMs) ||
+            now - began >= this.maxSeconds * 1000;
+        if (finished) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, POLL_MS);
+    });
+    return this.stop();
   }
 
   start() {
@@ -143,4 +200,14 @@ export function encodeWav(samples, sampleRate = SAMPLE_RATE) {
     view.setInt16(44 + index * 2, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
   });
   return new Blob([buffer], { type: "audio/wav" });
+}
+
+// Base64 of a Blob's bytes, as sent in the gateway's `audio_wav_base64` field.
+export async function blobToBase64(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  for (let start = 0; start < bytes.length; start += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(start, start + 0x8000));
+  }
+  return btoa(binary);
 }

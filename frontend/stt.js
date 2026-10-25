@@ -38,6 +38,13 @@ export class ModelSpeechToText {
     return this._whisper.transcribe(clip.samples);
   }
 
+  // Hands-free: listens until the person has spoken and gone quiet, then transcribes.
+  async listenOnce() {
+    const clip = await this._recorder.listen();
+    if (clip.error) return "";
+    return this._whisper.transcribe(clip.samples);
+  }
+
   abort() {
     if (this._recorder.recording) this._recorder.stop();
   }
@@ -102,6 +109,43 @@ export class SpeechToText {
 
     this._recognition = recognition;
     recognition.start();
+  }
+
+  // Hands-free: the browser detects the end of speech itself. Resolves with the transcript
+  // ("" when nothing was heard) and rejects on a real failure such as no network.
+  listenOnce(timeoutMs = 10_000) {
+    if (!Recognition) return Promise.reject(new Error("Speech recognition is not supported."));
+    return new Promise((resolve, reject) => {
+      const recognition = new Recognition();
+      recognition.lang = this.lang;
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      let text = "";
+      let failure = null;
+      this._once = recognition;
+      const timer = setTimeout(() => recognition.stop(), timeoutMs);
+      recognition.onresult = (event) => {
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+          if (event.results[index].isFinal) text += `${event.results[index][0].transcript} `;
+        }
+      };
+      recognition.onerror = (event) => {
+        if (event.error !== "no-speech" && event.error !== "aborted") failure = event.error;
+      };
+      recognition.onend = () => {
+        clearTimeout(timer);
+        this._once = null;
+        if (failure) reject(new Error(`Speech recognition failed: ${failure}`));
+        else resolve(text.replace(/\s+/g, " ").trim());
+      };
+      recognition.start();
+    });
+  }
+
+  // Cuts a hands-free listen short so something urgent can be spoken straight away.
+  abortListening() {
+    this._once?.abort();
   }
 
   // Ends listening and resolves with the transcript ("" when nothing was heard).

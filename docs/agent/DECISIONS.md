@@ -1,5 +1,37 @@
 # Decision Log
 
+## 2026-10-24 — Optional browser enrollment for the demo
+
+- **Status:** Accepted (demo only)
+- **Context:** Enrollment was local-only (`luma-enroll-voice`) so no network caller can replace a
+  voice profile, but a demo user wants to enroll by speaking into the browser on localhost.
+- **Decision:** The gateway accepts `voice_enroll` (up to 5 clips) only when started with
+  `LUMA_ALLOW_BROWSER_ENROLL=1` and only from loopback addresses. It enrolls the operator that
+  owns the trusted device, using the existing `VoiceAuthService.enroll`. Open
+  `auth.html?device=DC-D-100&enroll=1`. Off by default. The page first asks for the spoken name
+  (browser speech recognition), and the gateway stores it as the operator's display name only
+  after the voice enrollment succeeds, then says "<name>, you are enrolled."
+- **Consequences:** Anyone at the gateway computer can overwrite that device's voice profile
+  while the flag is on, and enrollment attempts are not written to an audit table. Do not enable
+  it in a shared or production deployment.
+
+## 2026-10-24 — Add a voice gateway with 60-second sessions
+
+- **Status:** Accepted
+- **Context:** Workers must sign in by voice, hear their name, and then say
+  `restart server X` or `fix server X`, with permissions enforced by the backend.
+- **Decision:** Add `src/luma_datacenter/gateway/` without changing existing backend
+  modules. The earpiece sends recorded audio once; the backend's ECAPA verifier derives the
+  operator from the trusted device and the gateway opens a 60-second session carrying the role
+  and server permissions (from the database, never the client). Commands arrive as text with the
+  session id and are authorized against `server_assignments`; every attempt is audited in
+  `server_action_events`. The signed backend token stays server-side.
+- **Consequences:** Browser-computed embeddings were dropped because the backend can only
+  compare its own ECAPA embeddings. Speech-to-text and text-to-speech run in the browser
+  (Whisper and MMS-TTS via Transformers.js, with Chrome's engines as fallback). Restart and fix
+  are simulated by leaving the server `running`. Sessions are in memory, so a gateway restart
+  signs everyone out. Voice similarity still gives no liveness or replay protection.
+
 ## 2026-10-24 — Add organization-scoped voice administration
 
 - **Status:** Accepted

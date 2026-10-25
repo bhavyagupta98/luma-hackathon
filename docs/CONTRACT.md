@@ -15,6 +15,11 @@ works out what the operator asked for. It never decides who someone is or
 whether they are allowed to do something, and it never keeps a token longer
 than the pending confirmation that needs it.
 
+> **Status.** What is implemented and tested is the section **"Voice authentication and
+> sessions"** (sign-in by voice, role and permissions, `restart`/`fix server X`, 60-second
+> sessions, onboarding). Sections "New MCP tools", "`backend_client.py`" and "Gateway dialogue"
+> are the original, larger plan and are **not built**; treat them as future work.
+
 ## Processes and URLs
 
 ```text
@@ -71,9 +76,8 @@ or HTTPS. Set `chrome://flags/#unsafely-treat-insecure-origin-as-secure` to
 - `audio_wav_base64` may be empty when the clip failed to record. The gateway
   then refuses any action that needs the operator's voice verified.
 
-> **Superseded by "Voice authentication" below:** the earpiece no longer
-> sends audio. It signs in once with a browser-computed voice embedding, then
-> sends text only.
+> **Superseded by "Voice authentication and sessions" below:** the earpiece sends
+> audio once, for sign-in only, then sends text with a session id.
 
 **Gateway → client:**
 
@@ -96,70 +100,80 @@ or HTTPS. Set `chrome://flags/#unsafely-treat-insecure-origin-as-secure` to
 | `warning` | Stop current speech, play `warn`, speak. Cut in front of the queue. |
 | `task` / `info` | Queue, play the earcon, speak in order. Never speak while push-to-talk is held. |
 
-## Voice authentication (frontend-computed embeddings)
+## Voice authentication and sessions (implemented)
 
-The project has two phases:
+Two phases, one WebSocket `ws://<host>:8080/ws/{device_id}` per earpiece:
 
-1. **Sign in:** `frontend/auth.html` records a phrase, computes a speaker
-   embedding **in the browser**, and sends only the embedding.
-2. **Commands:** `frontend/ear.html` then sends text only, as `utterance`
-   messages.
+1. **Sign in** (`frontend/auth.html`): the worker holds the button and speaks. The
+   browser sends the recorded WAV; the gateway checks it against the enrolled voice
+   profile in the backend database and replies with the worker's role and permissions.
+2. **Commands** (`frontend/ear.html`): speech is converted to text on the device and
+   only the text is sent, with the session id.
 
-**Embedding model:** `Xenova/wavlm-base-plus-sv` (WavLM x-vector), run with
-Transformers.js 3.8.1, ONNX `q8`. Each embedding has 512 dimensions and is
-L2-normalized, so cosine similarity is a plain dot product.
+The backend derives the operator from the **trusted device id** and verifies the voice
+with its ECAPA speaker model, so the audio travels to the gateway (not an embedding).
 
-- The model card reports about 0.96 for the same speaker and about 0.62 for
-  different speakers. The suggested threshold is **0.86**; tune it on the
-  demo mic.
-- **These embeddings are not comparable with the backend's SpeechBrain ECAPA
-  embeddings.** Enrollment and verification must both use WavLM vectors from
-  the frontend, and the ECAPA threshold of 0.25 doesn't apply.
-
-**Client → gateway** (same socket, `ws://<host>:8080/ws/{device_id}`):
+**Client -> gateway**
 
 ```json
-{"type": "voice_auth", "device_id": "DC-D-100",
- "embedding": [0.0123, -0.0456, "… 512 floats"],
- "embedding_model": "Xenova/wavlm-base-plus-sv", "embedding_dtype": "q8",
- "dimensions": 512, "normalized": true, "duration_s": 2.4, "sample_rate": 16000}
+{"type": "voice_auth", "audio_wav_base64": "<16-bit PCM WAV, 1-15 s>"}
+{"type": "utterance", "text": "restart server one hundred", "session_id": "<from auth_result>"}
 ```
 
-**Gateway → client:**
+**Gateway -> client**
 
 ```json
 {"type": "auth_result", "authenticated": true, "code": "VOICE_AUTHENTICATED",
- "spoken_message": "Voice verified. Welcome, Avery.",
+ "spoken_message": "Avery Chen is authenticated.",
+ "similarity_score": 0.71, "session_id": "...", "expires_in": 60,
  "operator": {"id": "OP-100", "name": "Avery Chen", "role": "org_admin"},
- "similarity_score": 0.93, "authentication_token": "<jwt>", "expires_at": 1767225600}
+ "role": "org_admin",
+ "permissions": {"scopes": ["server:control", "..."], "servers": ["SRV-100", "SRV-200"]}}
+
+{"type": "auth_result", "authenticated": false, "code": "VOICE_NOT_MATCHED",
+ "spoken_message": "You are not registered.", "similarity_score": 0.05}
+
+{"type": "say", "id": "evt_3", "text": "Task successful.", "priority": "task",
+ "earcon": "success", "lang": "en-US", "from": "assistant"}
+
+{"type": "session_expired", "session_id": "..."}      # then a warning `say`
 ```
 
-- On refusal, `authenticated` is `false`, `authentication_token` is `null`,
-  and `code` is one of `VOICE_NOT_MATCHED`, `VOICE_NOT_ENROLLED` or
-  `DEVICE_NOT_TRUSTED`, with a speakable `spoken_message`.
-- The frontend speaks `spoken_message` exactly as sent.
-- On success, the frontend stores
-  `{device_id, operator, authentication_token, expires_at}` in
-  `sessionStorage["luma.voiceSession"]` and opens `ear.html?device=…`.
+- Refusal `code`s come from the backend: `VOICE_NOT_MATCHED`, `VOICE_NOT_ENROLLED`,
+  `DEVICE_NOT_AUTHORIZED`, `INVALID_AUDIO`. Whatever the code (except unreadable audio, which asks the worker to try again), a failed sign-in speaks
+  "You are not registered." and a successful one "<name> is authenticated."; the frontend
+  speaks `spoken_message` as sent.
+- The signed backend token never leaves the server. Permissions are looked up from the
+  backend database; the client's claims about its own role are never trusted.
 
-**Enrollment:** the existing design keeps enrollment local-only, so it never
-goes over the socket.
+**Tasks.** `restart server X` (also "reboot") and `fix server X` (also "repair"). X may be
+spoken as "one hundred", "100", "SRV-100" or "one oh oh". The gateway checks that the
+session's operator is active, in scope, and assigned to that server, then replies:
 
-1. Open `auth.html?enroll=1&device=DC-D-100&operator=OP-100&name=Avery%20Chen`.
-2. The operator records 3 phrases.
-3. The browser downloads `voice-enrollment-OP-100.json`:
-   `{operator_id, name, device_id, embedding_model, embedding_dtype,
-   dimensions, created_at, embeddings: [[512], [512], [512]], centroid: [512]}`.
-4. The backend team imports that file with a local command, storing
-   `centroid` as the operator's profile.
+| Situation | Spoken reply | Earcon |
+|---|---|---|
+| Assigned server | "Task successful." (server ends up `running`) | `success` |
+| Server exists but not assigned | "You are not allowed to do this task." | `error` |
+| Unknown server | "I couldn't find that server." | `error` |
+| No server understood | "Which server? Say restart or fix, then the server." | `task` |
+| Not a task | "I can restart a server or fix a server. ..." | `task` |
+| Missing, forged, expired or other-device session | "Please authenticate with your voice first." | `error` |
 
-**Frontend-only testing:** `auth.html?mock=1` verifies against the enrollment
-saved in that browser, with no backend.
+Every task attempt (allowed or refused) is written to `server_action_events`.
 
-**Security caveat (say it in the pitch):** a client-computed embedding is a
-replayable credential. Anyone who captures the vector can resend it. The
-backend should accept only embeddings over TLS from trusted devices, rate-limit
-attempts, and treat this as demo-grade.
+**Session lifetime.** A session lasts **60 seconds from authentication**, then the
+gateway clears it, sends `session_expired` plus "Your session has expired. Please
+authenticate again.", and the earpiece returns to sign-in. Each worker's session is
+independent. Signing in again replaces the old one.
+
+**Onboarding a worker** (unchanged backend rules): an `org_admin` authenticates by voice,
+that one-time token authorizes `add_organization_user`, and the new worker enrolls their
+own voice locally (`luma-enroll-voice`). Until then they get `VOICE_NOT_ENROLLED`. Enrollment
+is deliberately not exposed over the network.
+
+**Security caveat (say it in the pitch):** speaker similarity is not proof of liveness. A
+recording or synthetic voice may pass, and the pilot has no challenge-response or replay
+defense.
 
 ## Gateway HTTP (for the dashboard)
 

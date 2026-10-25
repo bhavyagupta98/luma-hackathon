@@ -41,8 +41,15 @@ export class BrowserVoice {
       utterance.rate = rate;
       const voice = this._voiceFor(lang);
       if (voice) utterance.voice = voice;
-      utterance.onend = resolve;
-      utterance.onerror = resolve; // also fires on cancel()
+      // Some browsers never fire onend (no voices installed, or a stalled engine); don't wait forever.
+      const words = text.trim().split(/\s+/).length;
+      const fallback = setTimeout(resolve, 3000 + (words * 400) / rate);
+      const done = () => {
+        clearTimeout(fallback);
+        resolve();
+      };
+      utterance.onend = done;
+      utterance.onerror = done; // also fires on cancel()
       speechSynthesis.speak(utterance);
     });
   }
@@ -102,6 +109,9 @@ export class ModelVoice {
     if (generation !== this._generation) return; // cancelled while generating
 
     this._context ??= new AudioContext();
+    // A context created without a recent click starts suspended and would play nothing, forever.
+    await this._context.resume().catch(() => {});
+    if (this._context.state !== "running") return this._fallback.say(text, { lang, rate });
     const buffer = this._context.createBuffer(1, speech.audio.length, speech.samplingRate);
     buffer.copyToChannel(speech.audio, 0);
     const source = this._context.createBufferSource();
@@ -112,6 +122,8 @@ export class ModelVoice {
       this._finish = resolve;
       source.onended = resolve;
       source.start();
+      // If playback stalls, don't leave the page waiting for a sound that never ends.
+      setTimeout(resolve, (buffer.duration + 2) * 1000);
     });
     if (this._source === source) this._source = null;
   }
